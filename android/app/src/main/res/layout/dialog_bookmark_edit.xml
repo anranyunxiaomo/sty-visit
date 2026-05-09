@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:boxBackgroundMode="none"
+        android:layout_marginBottom="12dp">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etBookmarkName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="书签名称"
+            android:textColor="@color/ios_text_primary"
+            android:textColorHint="@color/ios_text_secondary"
+            android:inputType="text" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:boxBackgroundMode="none"
+        android:layout_marginBottom="12dp">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etBookmarkHost"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="主机IP (Host)"
+            android:textColor="@color/ios_text_primary"
+            android:textColorHint="@color/ios_text_secondary"
+            android:inputType="text" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:boxBackgroundMode="none"
+        android:layout_marginBottom="12dp">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etBookmarkPort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="端口 (Port)"
+            android:textColor="@color/ios_text_primary"
+            android:textColorHint="@color/ios_text_secondary"
+            android:inputType="number" />
+    </com.google.android.material.textfield.TextInputLayout>
+        
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:boxBackgroundMode="none"
+        android:layout_marginBottom="12dp">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etBookmarkUser"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="用户名 (User)"
+            android:textColor="@color/ios_text_primary"
+            android:textColorHint="@color/ios_text_secondary"
+            android:inputType="text" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:endIconMode="password_toggle"
+        app:boxBackgroundMode="none"
+        android:layout_marginBottom="12dp">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etBookmarkPwd"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="密码 (Password)"
+            android:textColor="@color/ios_text_primary"
+            android:textColorHint="@color/ios_text_secondary"
+            android:inputType="textPassword" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+</LinearLayout>

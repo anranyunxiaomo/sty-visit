@@ -1,0 +1,94 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+
+def versionPropsFile = file('version.properties')
+def versionProps = new Properties()
+if (versionPropsFile.canRead()) {
+    versionProps.load(new FileInputStream(versionPropsFile))
+} else {
+    versionProps['VERSION_CODE'] = '60'
+    versionProps['VERSION_NAME'] = '5.1.0'
+}
+
+def buildVersionCode = versionProps['VERSION_CODE'].toInteger()
+def buildVersionName = versionProps['VERSION_NAME']
+
+// 判断是否为打包任务，如果是，则递增版本号
+def runTasks = gradle.startParameter.taskNames
+if (runTasks.any { it.contains("assemble") || it.contains("bundle") }) {
+    buildVersionCode++
+    versionProps['VERSION_CODE'] = buildVersionCode.toString()
+    versionProps.store(versionPropsFile.newWriter(), null)
+}
+
+// 在可视版本号末尾追加自增构建号
+def finalVersionName = "1.0.0"
+
+
+android {
+    namespace 'com.sty.visit.manager'
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "com.sty.visit.manager"
+        minSdk 24
+        targetSdk 33
+        versionCode buildVersionCode
+        versionName finalVersionName
+
+        resConfigs "zh"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(RELEASE_STORE_FILE)
+            storePassword RELEASE_STORE_PASSWORD
+            keyAlias RELEASE_KEY_ALIAS
+            keyPassword RELEASE_KEY_PASSWORD
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.9.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.8.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.5.1'
+    
+    // 物理分离架构核心：Retrofit 网络引擎
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.9.3'
+    
+    // 异步流处理
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
+    
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}

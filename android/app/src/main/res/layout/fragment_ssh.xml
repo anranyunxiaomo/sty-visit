@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ios_bg_base">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="新增终端"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:textColor="@color/ios_text_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="手动配置 SSH 连接参数"
+            android:textSize="17sp"
+            android:textColor="@color/ios_text_secondary" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:background="@drawable/ios_card"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="16dp">
+                <EditText
+                    android:id="@+id/sshHostInput"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:hint="SSH 主机 (IP/域名)"
+                    android:textSize="17sp" />
+                <View android:layout_width="0.5dp" android:layout_height="24dp" android:background="@color/ios_separator" android:layout_marginHorizontal="8dp"/>
+                <EditText
+                    android:id="@+id/sshPortInput"
+                    android:layout_width="60dp"
+                    android:layout_height="match_parent"
+                    android:background="@null"
+                    android:hint="22"
+                    android:inputType="number"
+                    android:textSize="17sp" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="0.5dp" android:layout_marginStart="16dp" android:background="@color/ios_separator"/>
+
+            <EditText
+                android:id="@+id/sshUserInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:background="@null"
+                android:hint="登录用户 (如 root)"
+                android:paddingHorizontal="16dp"
+                android:textSize="17sp" />
+
+            <View android:layout_width="match_parent" android:layout_height="0.5dp" android:layout_marginStart="16dp" android:background="@color/ios_separator"/>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:endIconMode="password_toggle"
+                app:hintEnabled="false"
+                app:boxBackgroundMode="none">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/sshPwdInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:background="@null"
+                    android:hint="连接凭据 (密码或私钥)"
+                    android:inputType="textPassword"
+                    android:paddingHorizontal="16dp"
+                    android:textSize="17sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical">
+            <CheckBox
+                android:id="@+id/saveBookmarkRealCheck"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="存为书签"
+                android:textSize="15sp"
+                android:textColor="@color/ios_text_secondary" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/sshConnectBtn"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="32dp"
+            android:background="@drawable/apple_btn_bg"
+            android:text="立即连接终端"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="19sp"
+            android:textStyle="bold" />
+
+        <View android:layout_width="match_parent" android:layout_height="0.5dp" android:layout_marginTop="40dp" android:background="@color/ios_separator"/>
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:text="快速书签"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="@color/ios_text_primary" />
+            <TextView
+                android:id="@+id/btnManageBookmarks"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:text="管理"
+                android:textColor="@color/ios_blue"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </RelativeLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/bookmarkListSsh"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal" />
+    </LinearLayout>
+</ScrollView>

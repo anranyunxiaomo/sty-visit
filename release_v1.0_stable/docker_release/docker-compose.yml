@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  sty-visit:
+    build: .
+    # 如果已经把镜像推送到远程，也可以直接用 image: sty-visit-pro:latest
+    image: sty-visit-pro:latest
+    container_name: sty-visit
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # 挂载宿主机同级的配置文件，方便不进容器直接改应用级配置（可选，已在Dockerfile内部打底）
+      - ./application.yml:/app/application.yml
+      # 将业务的动态配置库和各种凭证挂载到宿主机的 ./config 下，防止容器重启丢失数据
+      - ./config:/app/config
+      # 将应用日志外挂出来，方便查看和接入 ELK
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Apple Minimal UI 2026: Light Mode -->
+    <!-- 基础背景 -->
+    <color name="ios_bg_base">#F2F2F7</color>
+    <color name="ios_bg_card">#FFFFFF</color>
+    <color name="ios_bg_elevated">#FFFFFF</color>
+    
+    <!-- 主色与重音 -->
+    <color name="ios_accent">#007AFF</color>
+    <color name="ios_accent_light">#1F007AFF</color> <!-- 12% opacity -->
+    
+    <!-- 填充色 (System Fill) -->
+    <color name="ios_fill_1">#33787880</color> <!-- 20% opacity -->
+    <color name="ios_fill_2">#29787880</color> <!-- 16% opacity -->
+    <color name="ios_fill_3">#1F787880</color> <!-- 12% opacity -->
+
+    <!-- 文字层级 -->
+    <color name="ios_text_primary">#000000</color>
+    <color name="ios_text_secondary">#993C3C43</color> <!-- 60% opacity -->
+    <color name="ios_text_tertiary">#4D3C3C43</color>  <!-- 30% opacity -->
+    <color name="ios_text_on_accent">#FFFFFF</color>
+
+    <!-- 分隔线与语义色 -->
+    <color name="ios_separator">#4A3C3C43</color> <!-- 29% opacity -->
+    <color name="ios_green">#34C759</color>
+    <color name="ios_red">#FF3B30</color>
+    <color name="ios_orange">#FF9500</color>
+    <color name="ios_yellow">#FFCC00</color>
+    
+    <color name="ios_bg_system">#F2F2F7</color>
+    <color name="ios_blue">#007AFF</color>
+    <color name="ios_gray">#8E8E93</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+</resources>

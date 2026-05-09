@@ -1,0 +1,27 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- 天穹：超前位 iOS 17/18 物理视觉系统 -->
+    <style name="Theme.VisitManagerPro" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <!-- 核心品牌色：极致黑白架构 -->
+        <item name="colorPrimary">@color/ios_blue</item>
+        <item name="colorPrimaryVariant">@color/black</item>
+        <item name="colorOnPrimary">@color/white</item>
+        
+        <!-- 环境辅助色 -->
+        <item name="colorSecondary">@color/ios_gray</item>
+        <item name="colorSecondaryVariant">@color/ios_separator</item>
+        <item name="colorOnSecondary">@color/black</item>
+        
+        <!-- Window 物理层建模 -->
+        <item name="android:windowBackground">@color/ios_bg_system</item>
+        <item name="android:statusBarColor">@color/ios_bg_system</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+        
+        <item name="android:navigationBarColor">@color/ios_bg_system</item>
+        <item name="android:windowContentTransitions">true</item>
+    </style>
+
+    <style name="Theme.VisitManagerPro.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+</resources>

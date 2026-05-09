@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginTop="8dp"
+    android:background="@drawable/ios_card"
+    android:padding="12dp">
+
+    <View
+        android:id="@+id/statusIndicator"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:background="@drawable/shape_circle_green"
+        app:layout_constraintTop_toTopOf="@id/logAction"
+        app:layout_constraintBottom_toBottomOf="@id/logAction"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <TextView
+        android:id="@+id/logAction"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:text="SSH_CONN_ESTABLISHED"
+        android:textColor="@color/ios_text_primary"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toEndOf="@id/statusIndicator"
+        app:layout_constraintEnd_toStartOf="@id/logTime" />
+
+    <TextView
+        android:id="@+id/logTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="10:45:00"
+        android:textColor="@color/ios_text_secondary"
+        android:textSize="12sp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/logDetail"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="WebSocket 链路已建立"
+        android:textColor="@color/ios_text_secondary"
+        android:textSize="13sp"
+        app:layout_constraintTop_toBottomOf="@id/logAction"
+        app:layout_constraintStart_toStartOf="@id/logAction"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/logIp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="192.168.1.100"
+        android:textColor="@color/ios_text_tertiary"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        app:layout_constraintTop_toBottomOf="@id/logDetail"
+        app:layout_constraintStart_toStartOf="@id/logAction" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
