@@ -1,0 +1,53 @@
+/* 
+ * 天穹 - 核心样式库
+ * 严格遵循 Apple Minimal UI 2026 设计令牌，实现极致的表现层独立
+ */
+
+:root {
+    --bg-primary: #000000;
+    --bg-secondary: #121212;
+    --accent: #0A84FF;
+    --card-bg: rgba(28, 28, 30, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+body {
+    background: var(--bg-primary);
+    color: #FFFFFF;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+#app {
+    min-height: 100vh;
+}
+
+.glass-panel {
+    background: var(--card-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 13px;
+}
+
+.btn-primary {
+    background: var(--accent);
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-primary:active {
+    transform: scale(0.96);
+    opacity: 0.8;
+}
+
+/* 移动端胶囊适配 */
+@media (max-width: 640px) {
+    .mobile-capsule {
+        border-radius: 24px;
+        margin: 8px;
+    }
+}

@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>天穹</title>
+    <link rel="stylesheet" href="/apple-ui.css" />
+    <script src="/lib/vue.js"></script>
+    <link rel="stylesheet" href="/lib/xterm.css" />
+    <script src="/lib/xterm.js"></script>
+    <script src="/lib/xterm-addon-fit.js"></script>
+    <script src="/lib/lucide.js"></script>
+    <script src="/lib/ace.js"></script>
+    <script src="/lib/utils.js"></script>
+    <style>
+        #hidden-input { position: absolute; opacity: 0; pointer-events: none; z-index: -1; }
+        .progress-ring { transform: rotate(-90deg); }
+        .progress-ring-circle { transition: stroke-dashoffset 0.6s ease; stroke: var(--color-accent); }
+        .snippet-tag { background: var(--color-fill-2); border-radius: var(--radius-xs); padding: 6px 12px; font-size: var(--text-caption1); font-weight: 600; color: var(--color-text-primary); white-space: nowrap; display: inline-flex; align-items: center; position: relative; }
+        .bookmark-delete { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; background: var(--color-red); color: white; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 10px; box-shadow: var(--shadow-sm); }
+        .snippet-tag:hover .bookmark-delete { display: flex; }
+    </style>
+</head>
+<body class="app-container">
+
+<div id="app" class="h-full flex flex-col">
+    <input type="text" id="hidden-input" autocorrect="off" autocapitalize="off">
+
+    <!-- 1. 登录页面 -->
+    <div v-if="!isWebLoggedIn" class="main-content items-center justify-center px-6">
+        <div class="mb-8 text-center">
+            <div style="width:80px;height:80px;border-radius:18px;margin:0 auto var(--sp-4);overflow:hidden;box-shadow:var(--shadow-sm);">
+                <img src="/logo.png" alt="天穹" style="width:100%;height:100%;object-fit:cover;display:block;">
+            </div>
+            <h1 style="font-size:var(--text-title1);font-weight:700;">天穹</h1>
+            <p style="color:var(--color-text-secondary);margin-top:var(--sp-1);">系统鉴权，触手可及</p>
+        </div>
+        <div class="w-full" style="max-width: 320px;">
+            <div class="space-y-4">
+                <input type="password" v-model="webPwd" @keyup.enter="handleWebLogin" placeholder="管理认证 Key" class="input text-center">
+                <button type="button" @click="handleWebLogin" :disabled="loading" class="btn btn-primary w-full" style="box-shadow:var(--shadow-sm);">
+                    {{ loading ? '校验中...' : '进入系统' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. SSH 引导/书签广场 -->
+    <div v-else-if="!showWorkspace" class="layout-wrapper">
+        <div class="layout-main">
+            <!-- 统一顶部导航栏 -->
+            <div class="nav-bar justify-between items-center" style="border-bottom:0.5px solid var(--color-separator);background:var(--glass-bg);">
+                <div class="flex items-center space-x-2">
+                    <img src="/logo.png" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">
+                    <span style="font-weight:700;font-size:var(--text-headline);">天穹管理系统</span>
+                </div>
+                <button type="button" @click="isWebLoggedIn = false; localStorage.removeItem('visit_token')" class="flex items-center gap-1 text-secondary hover:text-primary transition-colors" style="font-size:var(--text-sub);">
+                    <i data-lucide="log-out" style="width:16px;height:16px;"></i> 注销
+                </button>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="flex-1 overflow-y-auto px-6 py-10">
+                <!-- 书签广场视图 -->
+                <div v-if="!showConnectionForm" class="w-full max-w-4xl mx-auto">
+                    <div class="flex justify-between items-end mb-8">
+                        <div>
+                            <div class="flex items-center space-x-4">
+                                <h2 style="font-size:var(--text-title1);font-weight:700;">会话管理器</h2>
+                                <button v-if="sessions.length > 0" @click="showWorkspace = true" class="btn btn-secondary" style="height:28px;padding:0 12px;font-size:12px;border-radius:14px;"><i data-lucide="terminal" style="width:12px;height:12px;margin-right:4px;"></i>运行中 ({{sessions.length}})</button>
+                            </div>
+                            <p style="color:var(--color-text-secondary);margin-top:2px;">选择或创建一个新的 SSH 会话</p>
+                        </div>
+                        <button @click="showConnectionForm = true; formHost=''; formUser='root'; formPwd=''" class="btn btn-primary" style="height:40px;padding:0 20px;border-radius:var(--radius-full);font-size:14px;">
+                            <i data-lucide="plus" style="width:16px;height:16px;margin-right:4px;"></i> 新建连接
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div v-for="b in bookmarks" :key="b.id" @click="useBookmark(b); handleSshLogin()" class="card relative flex flex-col cursor-pointer hover:border-accent group transition-all" style="padding:var(--sp-4);background:var(--color-bg-card);">
+                    <div class="flex items-start justify-between mb-3">
+                        <div :style="'width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:' + getBookmarkColor(b.id).bg"
+                             style2="font-size:20px;line-height:1;">
+                            <span :style="'font-size:20px;line-height:1;user-select:none;'">{{ getBookmarkEmoji(b.id) }}</span>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button @click.stop="useBookmark(b, true)" class="p-2 text-tertiary hover:text-accent" style="padding:6px 10px;border-radius:8px;"><i data-lucide="edit-3" style="width:15px;height:15px;"></i></button>
+                            <button @click.stop="deleteBookmark(b.id)" class="p-2 text-tertiary hover:text-red" style="padding:6px 10px;border-radius:8px;"><i data-lucide="trash-2" style="width:15px;height:15px;"></i></button>
+                        </div>
+                    </div>
+                    <span style="font-size:16px;font-weight:600;color:var(--color-text-primary);" class="truncate">{{ b.name }}</span>
+                    <span style="font-size:12px;color:var(--color-text-tertiary);" class="truncate">{{ b.user }}@{{ b.host }}:{{ b.port }}</span>
+                </div>
+                
+                <div v-if="bookmarks.length === 0" @click="showConnectionForm = true" class="card-inset border-dashed flex flex-col items-center justify-center py-12 cursor-pointer" style="border:2px dashed var(--color-separator);background:none;">
+                    <i data-lucide="plus-circle" style="width:32px;height:32px;color:var(--color-text-tertiary);margin-bottom:8px;"></i>
+                    <p style="color:var(--color-text-tertiary);font-weight:600;">添加首个服务器书签</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 新建/编辑连接表单 -->
+        <div v-else class="card w-full max-w-md mx-auto" style="padding: var(--sp-6);">
+            <div class="flex items-center mb-6">
+                <button @click="showConnectionForm = false; editingBookmarkId = null" class="mr-4 text-secondary"><i data-lucide="arrow-left" style="width:24px;height:24px;"></i></button>
+                <h2 style="font-size:var(--text-title2);font-weight:600;">会话属性</h2>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="flex space-x-3">
+                    <div class="flex-1">
+                        <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">主机地址</label>
+                        <input type="text" v-model="formHost" placeholder="127.0.0.1" class="input">
+                    </div>
+                    <div style="width:90px;">
+                        <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">端口</label>
+                        <input type="text" v-model="formPort" placeholder="22" class="input text-center">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">登录用户</label>
+                    <input type="text" v-model="formUser" placeholder="root" class="input">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">身份凭据</label>
+                    <textarea v-model="formPwd" placeholder="密码或私钥内容..." class="input" style="resize:none;height:100px;font-family:monospace;font-size:12px;"></textarea>
+                    <div class="flex justify-between items-center mt-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" v-model="formIsKey" style="margin-right:8px;">
+                            <span style="font-size:13px;color:var(--color-text-secondary);">使用 SSH 密钥</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" v-model="shouldSaveBookmark" style="margin-right:8px;">
+                            <span style="font-size:13px;color:var(--color-accent);font-weight:600;">保存书签</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div v-if="shouldSaveBookmark" class="animate-in slide-in-from-top-2">
+                    <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">书签名称</label>
+                    <input type="text" v-model="bookmarkName" placeholder="例如：生产数据库" class="input">
+                </div>
+
+                <div class="flex space-x-3 mt-6">
+                    <button type="button" @click="showConnectionForm = false; editingBookmarkId = null" class="btn flex-1" style="background:var(--color-fill-2);color:var(--color-text-primary);">取消</button>
+                    <button type="button" @click="handleSshLogin" class="btn btn-primary flex-1" :disabled="loading">
+                        {{ loading ? '连接中...' : '立即连接' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- 3. 工作区 -->
+    <template v-else>
+        <div class="layout-wrapper">
+            <!-- 左侧边栏 (桌面端) / 底部导航 (移动端) -->
+            <div class="tab-bar">
+                <button type="button" @click="currentTab = 'monitor'" class="tab-item" :class="{'is-active': currentTab === 'monitor'}">
+                    <i data-lucide="bar-chart-2" style="width:24px;height:24px;"></i>
+                    <span>看板</span>
+                </button>
+                <button type="button" @click="currentTab = 'terminal'" class="tab-item" :class="{'is-active': currentTab === 'terminal'}">
+                    <i data-lucide="terminal" style="width:24px;height:24px;"></i>
+                    <span>终端</span>
+                </button>
+                <button type="button" @click="currentTab = 'files'" class="tab-item" :class="{'is-active': currentTab === 'files'}">
+                    <i data-lucide="folder" style="width:24px;height:24px;"></i>
+                    <span>文件</span>
+                </button>
+                <button type="button" @click="currentTab = 'transfer'" class="tab-item" :class="{'is-active': currentTab === 'transfer'}">
+                    <i data-lucide="download-cloud" style="width:24px;height:24px;"></i>
+                    <span>传输</span>
+                </button>
+                <button type="button" @click="currentTab = 'audit'" class="tab-item" :class="{'is-active': currentTab === 'audit'}">
+                    <i data-lucide="activity" style="width:24px;height:24px;"></i>
+                    <span>审计</span>
+                </button>
+            </div>
+
+            <div class="layout-main">
+                <div class="nav-bar" style="padding-bottom: 0; gap: var(--sp-2); flex-direction: column; align-items: stretch; border-bottom: none; background: var(--color-bg-base);">
+                    <div class="flex justify-between items-center w-full">
+                        <div class="flex items-center space-x-2">
+                            <span style="font-weight:700;font-size:var(--text-headline);">工作区</span>
+                        </div>
+                        <button type="button" @click="handleSshDisconnect" class="btn btn-secondary" style="height:28px;padding:0 12px;border-radius:var(--radius-full);font-size:12px;font-weight:600;">
+                            <i data-lucide="library" style="width:14px;height:14px;margin-right:4px;"></i> 书签库
+                        </button>
+                    </div>
+                    
+                    <div class="flex overflow-x-auto no-scrollbar w-full items-end" style="border-bottom: 0.5px solid var(--color-separator); gap: 6px;">
+                        <div v-for="s in sessions" :key="s.id" 
+                             @click="switchSession(s.id)"
+                             class="flex items-center justify-between cursor-pointer transition-all group"
+                             :style="activeSessionId === s.id ? 'height:36px;padding:0 12px 0 16px;background:var(--color-bg-card);border:0.5px solid var(--color-separator);border-bottom:none;border-radius:12px 12px 0 0;font-weight:600;color:var(--color-text-primary);box-shadow: 0 -2px 8px rgba(0,0,0,0.02); position:relative; bottom:-1px; z-index:2;' : 'height:32px;padding:0 12px 0 16px;background:var(--color-fill-3);color:var(--color-text-secondary);border-radius:10px 10px 0 0;font-weight:500; margin-bottom: 1px;'">
+                             
+                            <div class="flex items-center">
+                                <div class="w-1.5 h-1.5 rounded-full mr-2" :style="s.isWsDisconnected ? 'background:var(--color-red);' : 'background:var(--color-success);'"></div>
+                                <span class="truncate" style="max-width: 100px; font-size: 13px;">{{ s.name }}</span>
+                            </div>
+                            
+                            <div @click.stop="closeSession(s.id)" class="ml-3 w-5 h-5 flex items-center justify-center rounded-full transition-opacity" :class="activeSessionId === s.id ? 'opacity-100 hover:bg-black hover:bg-opacity-10 dark:hover:bg-white dark:hover:bg-opacity-20' : 'opacity-0 group-hover:opacity-100 hover:bg-black hover:bg-opacity-10'">
+                                <i data-lucide="x" style="width:12px;height:12px;"></i>
+                            </div>
+                        </div>
+                        
+                        <div @click="showConnectionForm = true; showWorkspace = false" class="flex items-center justify-center cursor-pointer transition-colors hover:text-accent" style="height:32px;width:32px;margin-bottom:1px;color:var(--color-text-tertiary);border-radius:8px;">
+                            <i data-lucide="plus" style="width:18px;height:18px;"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="main-content">
+                    <!-- 终端视图 -->
+            <div v-show="currentTab === 'terminal'" class="flex-1 flex flex-col overflow-hidden relative">
+                <div style="padding:var(--sp-2) var(--sp-4);display:flex;align-items:center;gap:var(--sp-2);background:var(--color-bg-card);border-bottom:0.5px solid var(--color-separator);">
+                    <div class="flex-1 flex gap-2 overflow-x-auto no-scrollbar">
+                        <div v-for="s in snippets" :key="s.name" @click="executeSnippet(s.command)" class="snippet-tag cursor-pointer hover:bg-accent-light hover:text-accent transition-colors">
+                            {{ s.name }}
+                        </div>
+                    </div>
+                    <div style="width:1px;height:20px;background:var(--color-separator);margin:0 4px;"></div>
+                    <button @click="showSnippetManager = true; refreshIcons()" class="flex items-center gap-1 text-tertiary font-bold hover:text-accent transition-colors" style="font-size:10px;white-space:nowrap;margin-right:8px;">
+                        <i data-lucide="settings" style="width:12px;height:12px;"></i> 指令库
+                    </button>
+                    <div style="width:1px;height:20px;background:var(--color-separator);margin:0 4px;"></div>
+                    <button @click="syncTermToFiles" class="flex items-center gap-1 text-accent font-bold" style="font-size:10px;white-space:nowrap;">
+                        <i data-lucide="refresh-cw" style="width:12px;height:12px;"></i> 同步至文件
+                    </button>
+                </div>
+
+                <div class="terminal-container relative">
+                    <div v-for="s in sessions" :key="s.id" v-show="activeSessionId === s.id" :id="'term-' + s.id" style="width:100%;height:100%;"></div>
+                    <div v-if="isWsDisconnected" class="absolute flex-col items-center justify-center" style="inset:0;background:rgba(0,0,0,0.6);z-index:20;display:flex;">
+                        <i data-lucide="wifi-off" style="color:rgba(255,255,255,0.5);width:40px;height:40px;margin-bottom:12px;"></i>
+                        <span style="color:white;font-weight:600;">链路中断重试中...</span>
+                    </div>
+                </div>
+                
+                <div style="padding:var(--sp-2) var(--sp-4);display:flex;gap:var(--sp-2);overflow-x:auto;" class="no-scrollbar">
+                    <button type="button" @click="focusTerminal" style="height:36px;padding:0 var(--sp-3);border-radius:var(--radius-sm);background:var(--color-accent-light);color:var(--color-accent);font-weight:600;font-size:var(--text-caption1);display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                        <i data-lucide="keyboard" style="width:16px;height:16px;"></i> 聚焦终端
+                    </button>
+                    <div style="width:1px;background:var(--color-separator);flex-shrink:0;"></div>
+                    <button type="button" v-for="key in coreShortcuts" :key="key.label" @click="sendKey(key.val)" style="height:36px;padding:0 var(--sp-3);border-radius:var(--radius-sm);background:var(--color-bg-card);font-weight:600;font-size:var(--text-caption1);box-shadow:var(--shadow-xs);flex-shrink:0;">
+                        {{ key.label }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- 文件管理视图 -->
+            <div v-show="currentTab === 'files'" class="flex-1 flex flex-col bg-transparent overflow-hidden relative">
+                <div style="padding:var(--sp-2) var(--sp-4);display:flex;align-items:center;gap:var(--sp-3);background:var(--glass-bg);backdrop-filter:blur(10px);border-bottom:0.5px solid var(--color-separator);">
+                    <div class="flex-1 flex items-center" style="background:var(--color-fill-3);border-radius:var(--radius-sm);padding:6px 12px;">
+                        <i data-lucide="folder" style="width:14px;height:14px;color:var(--color-accent);margin-right:8px;flex-shrink:0;"></i>
+                        <input type="text" v-model="inputPath" @keyup.enter.stop.prevent="jumpToPath" class="w-full" style="background:none;border:none;outline:none;font-size:13px;font-weight:600;color:var(--color-text-primary);" placeholder="输入路径跳转">
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button type="button" @click="syncFilesToTerm" class="text-accent font-bold" style="font-size:10px;">跟随终端</button>
+                        <button type="button" @click="syncPathToTerm" style="color:var(--color-text-secondary);font-size:10px;font-weight:700;">下发路径</button>
+                        <label class="cursor-pointer" style="width:28px;height:28px;border-radius:var(--radius-sm);background:rgba(0,122,255,0.1);color:var(--color-accent);display:flex;align-items:center;justify-content:center;">
+                            <i data-lucide="upload" style="width:14px;height:14px;"></i>
+                            <input type="file" @change="uploadFile" style="display:none;">
+                        </label>
+                        <button type="button" @click="goUp" v-if="currentPath !== '/'" style="width:28px;height:28px;border-radius:var(--radius-sm);background:var(--color-fill-2);display:flex;align-items:center;justify-content:center;">
+                            <i data-lucide="arrow-up" style="width:14px;height:14px;"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="list flex-1 overflow-y-auto" style="border-radius:0;background:transparent;box-shadow:none;">
+                    <div v-for="f in fileList" :key="f.path" @click="handleFileClick(f)" class="list-row" style="background:var(--color-bg-card);margin:8px 16px;border-radius:var(--radius-md);border-bottom:none;box-shadow:var(--shadow-xs);">
+                        <input type="checkbox" v-model="selectedPaths" :value="f.path" @click.stop style="width:18px;height:18px;margin-right:4px;">
+                        <div class="list-row-icon" :style="f.dir ? 'background:var(--color-accent-light);color:var(--color-accent);' : 'background:var(--color-fill-2);color:var(--color-text-secondary);'">
+                            <i :data-lucide="f.dir ? 'folder' : 'file-text'" style="width:16px;height:16px;"></i>
+                        </div>
+                        <div class="list-row-label flex flex-col truncate" style="line-height:1.2;">
+                            <span style="font-weight:600;font-size:15px;" class="truncate">{{ f.name }}</span>
+                            <span style="font-size:11px;color:var(--color-text-tertiary);">{{ f.updateTime }} · {{ f.dir ? '目录' : formatSize(f.size) }}</span>
+                        </div>
+                        <button type="button" @click.stop="openMenu(f)" style="color:var(--color-text-tertiary);padding:4px;"><i data-lucide="more-horizontal" style="width:20px;height:20px;"></i></button>
+                    </div>
+                    <div v-if="fileList.length === 0" class="flex flex-col items-center justify-center py-20" style="opacity:0.4;">
+                        <i data-lucide="inbox" style="width:40px;height:40px;margin-bottom:12px;"></i>
+                        <p style="font-weight:600;">暂无内容</p>
+                    </div>
+                    <div style="height: 100px;"></div>
+                </div>
+            </div>
+
+            <!-- 传输记录视图 -->
+            <div v-show="currentTab === 'transfer'" class="flex-1 flex flex-col bg-transparent overflow-hidden relative">
+                <div style="padding:calc(var(--sp-3) + env(safe-area-inset-top, 0px)) var(--sp-4) var(--sp-3);display:flex;justify-content:space-between;align-items:center;background:var(--glass-bg);backdrop-filter:blur(10px);border-bottom:0.5px solid var(--color-separator);">
+                    <h2 style="font-size:18px;font-weight:700;color:var(--color-text-primary);">传输任务</h2>
+                    <button @click="clearTransfers" style="color:var(--color-accent);font-size:14px;font-weight:600;">清空已完成</button>
+                </div>
+                <div class="list flex-1 overflow-y-auto" style="border-radius:0;background:transparent;box-shadow:none;">
+                    <div v-for="t in transferList" :key="t.id" class="list-row" style="background:var(--color-bg-card);margin:8px 16px;border-radius:var(--radius-md);border-bottom:none;box-shadow:var(--shadow-xs);display:flex;align-items:center;padding:12px 16px;">
+                        <div class="list-row-icon" :style="t.type === 'UPLOAD' ? 'background:rgba(52,199,89,0.1);color:var(--color-success);' : 'background:rgba(0,122,255,0.1);color:var(--color-accent);'">
+                            <i :data-lucide="t.type === 'UPLOAD' ? 'upload' : 'download'" style="width:20px;height:20px;"></i>
+                        </div>
+                        <div class="flex-1 overflow-hidden" style="margin-left:12px;">
+                            <div class="flex justify-between items-center" style="margin-bottom:4px;">
+                                <span style="font-weight:600;font-size:14px;color:var(--color-text-primary);" class="truncate">{{ t.name }}</span>
+                                <span :style="t.status === 'COMPLETED' ? 'color:var(--color-success);' : (t.status === 'ERROR' ? 'color:var(--color-danger);' : 'color:var(--color-text-secondary);')" style="font-size:12px;font-weight:600;flex-shrink:0;margin-left:8px;">
+                                    {{ t.status === 'COMPLETED' ? '成功' : (t.status === 'ERROR' ? '失败' : (t.progress + '%')) }}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span style="font-size:11px;color:var(--color-text-tertiary);" class="truncate">{{ t.targetPath }}</span>
+                                <span style="font-size:11px;color:var(--color-text-tertiary);flex-shrink:0;margin-left:8px;">{{ t.timestamp }}</span>
+                            </div>
+                            <div v-if="t.status === 'UPLOADING' || t.status === 'DOWNLOADING'" style="height:2px;background:var(--color-fill-2);border-radius:1px;margin-top:6px;overflow:hidden;">
+                                <div :style="{ width: t.progress + '%', background: 'var(--color-accent)', height: '100%' }"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="transferList.length === 0" class="flex flex-col items-center justify-center py-20" style="opacity:0.4;">
+                        <i data-lucide="inbox" style="width:40px;height:40px;margin-bottom:12px;"></i>
+                        <p style="font-weight:600;">暂无传输任务</p>
+                    </div>
+                    <div style="height: 100px;"></div>
+                </div>
+            </div>
+
+            <!-- 性能仪表盘 -->
+            <div v-show="currentTab === 'monitor'" class="flex-1 overflow-y-auto px-6 py-4 pb-24 space-y-4 max-w-4xl mx-auto w-full">
+                <div class="monitor-grid">
+                    <div class="card flex flex-col items-center text-center">
+                        <span style="font-size:10px;font-weight:700;color:var(--color-text-tertiary);margin-bottom:16px;">计算负载 (CPU)</span>
+                        <svg class="progress-ring" width="80" height="80">
+                            <circle style="color:var(--color-fill-2);" stroke-width="6" stroke="currentColor" fill="transparent" r="32" cx="40" cy="40"/>
+                            <circle class="progress-ring-circle" stroke-width="6" :stroke-dasharray="2 * Math.PI * 32" :stroke-dashoffset="2 * Math.PI * 32 * (1 - (monitor.cpu||0)/100)" stroke-linecap="round" fill="transparent" r="32" cx="40" cy="40"/>
+                        </svg>
+                        <span style="font-size:20px;font-weight:800;margin-top:12px;">{{(monitor.cpu||0).toFixed(0)}}%</span>
+                    </div>
+                    <div class="card flex flex-col items-center text-center">
+                        <span style="font-size:10px;font-weight:700;color:var(--color-text-tertiary);margin-bottom:16px;">内存使用 (MEM)</span>
+                        <svg class="progress-ring" width="80" height="80">
+                            <circle style="color:var(--color-fill-2);" stroke-width="6" stroke="currentColor" fill="transparent" r="32" cx="40" cy="40"/>
+                            <circle class="progress-ring-circle" stroke-width="6" :stroke-dasharray="2 * Math.PI * 32" :stroke-dashoffset="2 * Math.PI * 32 * (1 - (monitor.mem||0)/100)" stroke-linecap="round" fill="transparent" r="32" cx="40" cy="40" style="stroke:var(--color-purple);"/>
+                        </svg>
+                        <span style="font-size:20px;font-weight:800;margin-top:12px;">{{(monitor.mem||0).toFixed(0)}}%</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="font-size:11px;font-weight:700;color:var(--color-text-secondary);margin-bottom:16px;">资源明细</h3>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span style="font-size:var(--text-sub);color:var(--color-text-secondary);">开机时长</span>
+                            <span style="font-weight:600;">{{monitor.uptime || '---'}}</span>
+                        </div>
+                        <div class="space-y-3" style="padding-top:16px;border-top:0.5px solid var(--color-separator);">
+                            <div v-for="d in (monitor.disks || [])" :key="d.mount" class="flex flex-col space-y-1">
+                                <div class="flex justify-between" style="font-size:10px;font-weight:700;">
+                                    <span style="color:var(--color-text-tertiary);">{{d.mount}}</span>
+                                    <span>{{d.usage}}%</span>
+                                </div>
+                                <div style="height:6px;width:100%;background:var(--color-fill-2);border-radius:3px;overflow:hidden;">
+                                    <div :style="{width: d.usage + '%'}" style="height:100%;background:var(--color-text-primary);border-radius:3px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 系统配置 (对齐 App) -->
+                <div class="card">
+                    <h3 style="font-size:11px;font-weight:700;color:var(--color-text-secondary);margin-bottom:16px;">系统与安全</h3>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center" style="padding-bottom:12px;border-bottom:0.5px solid var(--color-separator);">
+                            <div class="flex flex-col">
+                                <span style="font-size:15px;font-weight:600;color:var(--color-text-primary);">H5 管理面板访问</span>
+                                <span style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px;">允许通过浏览器直接访问</span>
+                            </div>
+                            <label style="position:relative;display:inline-block;width:44px;height:24px;">
+                                <input type="checkbox" v-model="systemConfig.h5Enabled" @change="toggleH5" style="opacity:0;width:0;height:0;">
+                                <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:var(--color-fill-2);transition:.4s;border-radius:24px;" :style="systemConfig.h5Enabled ? 'background-color:var(--color-success);' : ''">
+                                    <span style="position:absolute;content:'';height:20px;width:20px;left:2px;bottom:2px;background-color:white;transition:.4s;border-radius:50%;" :style="systemConfig.h5Enabled ? 'transform:translateX(20px);' : ''"></span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="flex justify-between items-center" style="padding-bottom:12px;border-bottom:0.5px solid var(--color-separator);" @click="updateAuditRetention">
+                            <div class="flex flex-col cursor-pointer">
+                                <span style="font-size:15px;font-weight:600;color:var(--color-text-primary);">审计日志保留时长</span>
+                                <span style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px;">点击修改保留天数</span>
+                            </div>
+                            <span style="font-weight:600;color:var(--color-accent);font-size:14px;cursor:pointer;">{{ systemConfig.auditRetentionDays }} 天</span>
+                        </div>
+                        <div class="flex justify-between items-center pt-2 cursor-pointer" @click="wipeAllData">
+                            <div class="flex flex-col">
+                                <span style="font-size:15px;font-weight:600;color:var(--color-red);">安全粉碎数据 (Wipe)</span>
+                                <span style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px;">物理摧毁所有保存的书签与指令</span>
+                            </div>
+                            <i data-lucide="alert-triangle" style="width:20px;height:20px;color:var(--color-red);"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 审计日志 -->
+            <div v-show="currentTab === 'audit'" class="flex-1 flex flex-col overflow-hidden">
+                <div class="flex-1 overflow-y-auto px-6 py-4 pb-24">
+                    <div v-for="log in auditLogs" :key="log.timestamp + log.ip" class="log-card">
+                        <div class="log-header">
+                            <span class="badge" :class="log.status.includes('成功') ? 'badge-green' : 'badge-red'">{{ log.status }}</span>
+                            <span class="log-time">{{ log.timestamp }}</span>
+                        </div>
+                        <div class="log-title">{{ log.action }}</div>
+                        <div class="log-detail">{{ log.ip }} · {{ log.detail }}</div>
+                    </div>
+                </div>
+            </div>
+            </div>
+
+                <!-- 批量操作层 -->
+                <div v-if="selectedPaths.length > 0" class="card-glass flex items-center space-x-4" style="position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:200;padding:12px 24px;border-radius:var(--radius-full);">
+                    <span style="font-size:var(--text-sub);font-weight:600;">已选择 {{ selectedPaths.length }} 项</span>
+                    <button @click="handleBatchDelete" style="color:var(--color-red);font-weight:600;font-size:var(--text-sub);">销毁</button>
+                    <button @click="selectedPaths = []" style="color:var(--color-text-secondary);font-weight:600;font-size:var(--text-sub);">取消</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 动作菜单 -->
+    <div v-if="activeFile" @click="activeFile = null" class="sheet-overlay flex items-end">
+        <div @click.stop class="sheet">
+            <div class="sheet-handle"></div>
+            <div style="margin-bottom:var(--sp-6);">
+                <p style="font-size:var(--text-title3);font-weight:700;" class="truncate">{{ activeFile.name }}</p>
+                <p style="font-size:var(--text-caption1);color:var(--color-text-secondary);" class="truncate">{{ activeFile.path }}</p>
+            </div>
+            <div class="list" style="margin-bottom:var(--sp-4);">
+                <div v-if="!activeFile.dir && isEditable(activeFile.name)" @click="openEditor(activeFile)" class="list-row" style="padding:16px;">
+                    <i data-lucide="edit-3" style="width:20px;height:20px;color:var(--color-accent);margin-right:12px;"></i>
+                    <span style="font-weight:600;">修改代码/内容</span>
+                </div>
+                <div v-if="!activeFile.dir" @click="downloadFile(activeFile)" class="list-row" style="padding:16px;">
+                    <i data-lucide="download-cloud" style="width:20px;height:20px;color:var(--color-accent);margin-right:12px;"></i>
+                    <span style="font-weight:600;">提取文件</span>
+                </div>
+                <div @click="renameFile(activeFile)" class="list-row" style="padding:16px;">
+                    <i data-lucide="type" style="width:20px;height:20px;color:var(--color-text-tertiary);margin-right:12px;"></i>
+                    <span style="font-weight:600;">重命名</span>
+                </div>
+                <div @click="confirmDelete(activeFile)" class="list-row" style="padding:16px;">
+                    <i data-lucide="trash-2" style="width:20px;height:20px;color:var(--color-red);margin-right:12px;"></i>
+                    <span style="font-weight:600;color:var(--color-red);">安全粉碎</span>
+                </div>
+            </div>
+            <button type="button" @click="activeFile = null" class="btn w-full" style="background:var(--color-bg-card);color:var(--color-accent);font-size:var(--text-headline);">撤销</button>
+        </div>
+    </div>
+    
+    <!-- 编辑器 -->
+    <div v-show="editingFile" style="position:fixed;inset:0;background:var(--color-bg-base);z-index:250;display:flex;flex-direction:column;animation:apple-slide-up var(--t-base) var(--ease-spring);">
+        <div style="padding:calc(var(--sp-3) + env(safe-area-inset-top, 0px)) var(--sp-5) var(--sp-3);display:flex;justify-content:space-between;align-items:center;background:var(--color-bg-card);border-bottom:0.5px solid var(--color-separator);">
+            <div class="flex flex-col truncate" style="max-width:60%;">
+                <span style="font-size:var(--text-sub);font-weight:600;" class="truncate">{{ editingFile?.name }}</span>
+                <span style="font-size:10px;color:var(--color-text-secondary);" class="truncate">{{ editingFile?.path }}</span>
+            </div>
+            <div class="flex space-x-4">
+                <button type="button" @click="saveFile" :disabled="saving" style="color:var(--color-accent);font-weight:600;">{{ saving ? '应用中...' : '提交修改' }}</button>
+                <button type="button" @click="closeEditor" style="color:var(--color-text-secondary);font-weight:600;">退出</button>
+            </div>
+        </div>
+        <div id="ace-editor" class="flex-1"></div>
+    </div>
+    <!-- 指令库管理菜单 -->
+    <div v-if="showSnippetManager" @click="showSnippetManager = false" class="sheet-overlay flex items-end">
+        <div @click.stop class="sheet" style="height:80vh;display:flex;flex-direction:column;">
+            <div class="sheet-handle"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="font-size:var(--text-title3);font-weight:700;">管理常用命令</h3>
+                <button @click="openSnippetEditor()" style="color:var(--color-accent);font-weight:600;font-size:14px;">新增</button>
+            </div>
+            <div class="list flex-1 overflow-y-auto" style="box-shadow:none;background:transparent;padding:0;">
+                <div v-for="(s, idx) in snippets" :key="idx" class="list-row flex justify-between items-center" style="margin-bottom:8px;padding:12px;background:var(--color-bg-card);border-radius:12px;">
+                    <div class="flex-1 overflow-hidden cursor-pointer" @click="openSnippetEditor(s, idx)">
+                        <span style="font-weight:600;font-size:15px;display:block;">{{ s.name }}</span>
+                        <span style="font-size:12px;color:var(--color-text-secondary);display:block;" class="truncate">{{ s.command }}</span>
+                    </div>
+                    <button @click="deleteSnippet(idx)" style="color:var(--color-red);padding:8px;"><i data-lucide="trash-2" style="width:18px;height:18px;"></i></button>
+                </div>
+                <div v-if="snippets.length === 0" class="text-center py-10 opacity-50">暂无指令</div>
+            </div>
+            <button type="button" @click="showSnippetManager = false" class="btn w-full mt-4" style="background:var(--color-fill-2);color:var(--color-text-primary);">关闭</button>
+        </div>
+    </div>
+    
+    <!-- 单个指令编辑器 -->
+    <div v-if="editingSnippet !== null" @click="editingSnippet = null" class="sheet-overlay flex items-end" style="z-index:250;">
+        <div @click.stop class="sheet" style="padding-bottom:30px;">
+            <div class="sheet-handle"></div>
+            <h3 style="font-size:18px;font-weight:700;margin-bottom:20px;">{{ editingSnippetIndex === -1 ? '新增命令' : '编辑命令' }}</h3>
+            <div class="space-y-4">
+                <div>
+                    <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px;">名称</label>
+                    <input type="text" v-model="editingSnippet.name" class="input" placeholder="如：查看日志">
+                </div>
+                <div>
+                    <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px;">执行命令</label>
+                    <input type="text" v-model="editingSnippet.command" class="input" placeholder="如：tail -n 100 app.log">
+                </div>
+                <button type="button" @click="saveSnippet" class="btn btn-primary w-full" style="margin-top:16px;">保存配置</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+
+createApp({
+    setup() {
+        const isWebLoggedIn = ref(!!localStorage.getItem('visit_token'));
+        const webPwd = ref('');
+        const showWorkspace = ref(false);
+        const sessionInstances = new Map();
+        const sessions = ref(JSON.parse(sessionStorage.getItem('visit_sessions') || '[]').map(s => ({...s, term:null, socket:null, fitAddon:null, monitorTimer:null, reconnectTimer:null})));
+        const activeSessionId = ref(sessions.value.length > 0 ? sessions.value[0].id : null);
+        const activeSession = computed(() => sessions.value.find(s => s.id === activeSessionId.value) || null);
+        
+        const saveSessions = () => {
+            const toSave = sessions.value.map(s => ({
+                id: s.id, name: s.name, host: s.host, port: s.port, user: s.user, pwd: s.pwd, isKeyAuth: s.isKeyAuth,
+                currentPath: s.currentPath, fileList: s.fileList, transferList: s.transferList, monitor: s.monitor, isWsDisconnected: s.isWsDisconnected
+            }));
+            sessionStorage.setItem('visit_sessions', JSON.stringify(toSave));
+        };
+
+        // 书签随机图标与配色系统：基于 ID 哈希保证每个书签图标唯一且稳定
+        const BOOKMARK_ICONS = [
+            'server', 'database', 'cloud', 'monitor', 'cpu', 'hard-drive',
+            'globe', 'shield', 'layers', 'box', 'radio', 'git-branch',
+            'terminal', 'code', 'activity', 'zap'
+        ];
+        const BOOKMARK_COLORS = [
+            { bg: '#EFF6FF', fg: '#2563EB' }, // 蓝
+            { bg: '#F0FDF4', fg: '#16A34A' }, // 绿
+            { bg: '#FEF9C3', fg: '#CA8A04' }, // 黄
+            { bg: '#FDF4FF', fg: '#9333EA' }, // 紫
+            { bg: '#FFF7ED', fg: '#EA580C' }, // 橙
+            { bg: '#F0FDFA', fg: '#0D9488' }, // 青
+            { bg: '#FFF1F2', fg: '#E11D48' }, // 红
+            { bg: '#F8FAFC', fg: '#475569' }, // 灰
+        ];
+        // 简单哈希：根据书签 ID 字符串散列到固定位置
+        const strHash = (str) => {
+            if (!str) return 0;
+            let h = 0;
+            for (let i = 0; i < String(str).length; i++) h = (h * 31 + String(str).charCodeAt(i)) & 0x7fffffff;
+            return h;
+        };
+        const getBookmarkIcon = (id) => BOOKMARK_ICONS[strHash(id) % BOOKMARK_ICONS.length];
+        const getBookmarkColor = (id) => BOOKMARK_COLORS[strHash(id) % BOOKMARK_COLORS.length];
+
+        // 内联 Emoji 图标：最简单可靠的方案，不依赖 SVG/Lucide
+        const BOOKMARK_EMOJIS = ['🖥️','🗄️','☁️','🔒','⚡','🌐','📡','🔧','💾','🚀','🛡️','🔌','🧩','📊','🖧','🏗️'];
+        const getBookmarkEmoji = (id) => BOOKMARK_EMOJIS[strHash(id) % BOOKMARK_EMOJIS.length];
+        const formHost = ref(localStorage.getItem('ssh_conf_host') || '127.0.0.1');
+        const formPort = ref(localStorage.getItem('ssh_conf_port') || '22');
+        const formUser = ref(localStorage.getItem('ssh_conf_user') || 'root');
+        const formPwd = ref('');
+        const loading = ref(false);
+        const currentTab = ref('terminal');
+        const auditLogs = ref([]);
+        const currentPath = computed({ get: () => activeSession.value?.currentPath || '.', set: (v) => { if(activeSession.value) { activeSession.value.currentPath = v; saveSessions(); } } });
+        const fileList = computed({ get: () => activeSession.value?.fileList || [], set: (v) => { if(activeSession.value) { activeSession.value.fileList = v; saveSessions(); } } });
+        const transferList = computed({ get: () => activeSession.value?.transferList || [], set: (v) => { if(activeSession.value) { activeSession.value.transferList = v; saveSessions(); } } });
+        const monitor = computed({ get: () => activeSession.value?.monitor || { cpu: 0, mem: 0, load: 0, latency: '--' }, set: (v) => { if(activeSession.value) { activeSession.value.monitor = v; saveSessions(); } } });
+        const isWsDisconnected = computed({ get: () => activeSession.value?.isWsDisconnected || false, set: (v) => { if(activeSession.value) { activeSession.value.isWsDisconnected = v; saveSessions(); } } });
+
+        
+        
+        const selectedPaths = ref([]);
+        const activeFile = ref(null);
+        const editingFile = ref(null);
+        const saving = ref(false);
+        
+        const formIsKey = ref(false);
+        const bookmarks = ref([]);
+        const shouldSaveBookmark = ref(false);
+        const bookmarkName = ref('');
+        const editingBookmarkId = ref(null); // 正在编辑的书签 ID，null 表示新建
+        const terminalEl = ref(null);
+        const inputPath = ref('.');
+        
+        const showConnectionForm = ref(false);
+        const systemConfig = ref({ h5Enabled: true, auditRetentionDays: 31 });
+        const showSnippetManager = ref(false);
+        const editingSnippet = ref(null);
+        const editingSnippetIndex = ref(-1);
+        let aceEditor;
+
+        const coreShortcuts = [
+            {label:'Tab',val:'\t'}, {label:'ESC',val:'\x1b'}, 
+            {label:'Ctrl+C',val:'\x03'}, {label:'Enter',val:'\r'}
+        ];
+
+        
+        const switchSession = (id) => {
+            activeSessionId.value = id;
+            saveSessions();
+            nextTick(() => {
+                sessionInstances.get(id)?.fitAddon?.fit();
+                refreshIcons();
+            });
+        };
+
+        const closeSession = (id) => {
+            const s = sessions.value.find(x => x.id === id);
+            if (s) {
+                if (s.socket) s.socket.close();
+                if (s.monitorTimer) clearInterval(s.monitorTimer);
+                if (s.reconnectTimer) clearTimeout(s.reconnectTimer);
+            }
+            sessions.value = sessions.value.filter(x => x.id !== id);
+            if (activeSessionId.value === id) {
+                activeSessionId.value = sessions.value.length > 0 ? sessions.value[sessions.value.length - 1].id : null;
+            }
+            saveSessions();
+            if (sessions.value.length === 0) {
+                showWorkspace.value = false;
+            } else {
+                nextTick(() => { sessionInstances.get(id)?.fitAddon?.fit(); });
+            }
+        };
+
+        const formatTime = (date) => {
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        };
+
+        const refreshIcons = () => {
+            nextTick(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); });
+        };
+
+        const focusTerminal = () => {
+            const term = sessionInstances.get(activeSessionId.value)?.term;
+            if (term) {
+                term.focus();
+                const input = document.getElementById('hidden-input');
+                if (input) {
+                    input.focus();
+                    setTimeout(() => term.focus(), 10);
+                }
+            }
+        };
+
+        const protectPwd = (pwd) => VisitUtils.protectPwd(pwd, localStorage.getItem('visit_session_key'));
+        const revealPwd = (protectedStr) => VisitUtils.revealPwd(protectedStr, localStorage.getItem('visit_session_key'));
+
+        const handleWebLogin = async () => {
+            if (!webPwd.value || loading.value) return;
+            loading.value = true;
+            try {
+                const res = await fetch('/api/auth/login', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: webPwd.value })
+                });
+                
+                if (res.ok) {
+                    const body = await res.json();
+                    const data = body.data || {};
+                    localStorage.setItem('visit_token', data.token);
+                    localStorage.setItem('visit_session_key', data.sessionKey);
+                    isWebLoggedIn.value = true;
+                    refreshIcons();
+                    await fetchBookmarks();
+                } else {
+                    const errorMsg = await res.text();
+                    alert('认证未通过: ' + (errorMsg || '密码校验失败'));
+                }
+             } catch (e) { 
+                 alert('网络异常: 无法连接至管理服务端'); 
+             } finally {
+                 loading.value = false;
+             }
+        };
+
+        const snippets = ref([]);
+        const fetchSnippets = async () => {
+            const res = await apiFetch('/api/snippets');
+            if (res.ok) {
+                const body = await res.json();
+                snippets.value = body.data || [];
+            }
+        };
+
+        const executeSnippet = (cmd) => {
+            sessionInstances.get(activeSessionId.value)?.socket?.send(cmd + '\n');
+        };
+
+        const openSnippetEditor = (snippet = null, idx = -1) => {
+            if (snippet) {
+                editingSnippet.value = JSON.parse(JSON.stringify(snippet));
+            } else {
+                editingSnippet.value = { name: '', command: '', category: 'Tool' };
+            }
+            editingSnippetIndex.value = idx;
+        };
+
+        const saveSnippet = async () => {
+            if (!editingSnippet.value.name || !editingSnippet.value.command) return alert('名称和命令必填');
+            let updatedList = JSON.parse(JSON.stringify(snippets.value));
+            if (editingSnippetIndex.value === -1) {
+                updatedList.push(editingSnippet.value);
+            } else {
+                updatedList[editingSnippetIndex.value] = editingSnippet.value;
+            }
+            const res = await apiFetch('/api/snippets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedList)
+            });
+            if (res.ok) {
+                snippets.value = updatedList;
+                editingSnippet.value = null;
+                refreshIcons();
+            } else {
+                alert('保存失败');
+            }
+        };
+
+        const deleteSnippet = async (idx) => {
+            if (!confirm('确定删除该命令吗？')) return;
+            let updatedList = JSON.parse(JSON.stringify(snippets.value));
+            updatedList.splice(idx, 1);
+            const res = await apiFetch('/api/snippets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedList)
+            });
+            if (res.ok) {
+                snippets.value = updatedList;
+            }
+        };
+
+        const fetchSystemConfig = async () => {
+            try {
+                const res1 = await apiFetch('/api/config/h5/status');
+                if (res1.ok) {
+                    const body = await res1.json();
+                    systemConfig.value.h5Enabled = body.data.enabled;
+                }
+                const res2 = await apiFetch('/api/config/audit/retention');
+                if (res2.ok) {
+                    const body = await res2.json();
+                    systemConfig.value.auditRetentionDays = body.data.days;
+                }
+            } catch (e) { console.warn('Failed to load system config'); }
+        };
+
+        const toggleH5 = async () => {
+            if (!systemConfig.value.h5Enabled) {
+                if (!confirm('警告：关闭后你将立即无法访问网页端（直到从 App 端重新开启）。确定要关闭吗？')) {
+                    systemConfig.value.h5Enabled = true;
+                    return;
+                }
+            }
+            await apiFetch('/api/config/h5/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: systemConfig.value.h5Enabled })
+            });
+        };
+
+        const updateAuditRetention = async () => {
+            const val = prompt('请输入审计日志保留天数 (例如: 31):', systemConfig.value.auditRetentionDays);
+            const days = parseInt(val);
+            if (days && days > 0) {
+                const res = await apiFetch('/api/config/audit/retention', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days })
+                });
+                if (res.ok) {
+                    systemConfig.value.auditRetentionDays = days;
+                    alert('修改成功');
+                }
+            }
+        };
+
+        const wipeAllData = async () => {
+            const pwd = prompt('【高危操作】将物理摧毁所有书签、快捷指令及日志数据。请输入 Admin 密钥确认：');
+            if (pwd) {
+                const res = await apiFetch('/api/config/wipe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pwd })
+                });
+                if (res.ok) {
+                    alert('数据擦除完成，系统已重置');
+                    handleLogout();
+                } else {
+                    alert('擦除失败，密钥可能错误');
+                }
+            }
+        };
+
+        const fetchBookmarks = async () => {
+            const res = await apiFetch('/api/bookmarks');
+            if (res.ok) {
+                const body = await res.json();
+                bookmarks.value = body.data || [];
+                // 书签图标是动态绑定，需要 Vue 完成 DOM 更新后再让 Lucide 扫描渲染
+                nextTick(() => refreshIcons());
+            }
+        };
+
+        const useBookmark = async (b, isEdit = false) => {
+            formHost.value = b.host;
+            formPort.value = b.port;
+            formUser.value = b.user;
+            const encryptedStr = b.isKeyAuth ? b.key : b.pwd;
+            if (encryptedStr && encryptedStr.startsWith('PROTECTED:AES:')) {
+                formPwd.value = await revealPwd(encryptedStr.substring(14));
+            } else {
+                formPwd.value = encryptedStr;
+            }
+            formIsKey.value = b.isKeyAuth;
+            if (isEdit) {
+                // 编辑模式：自动勾选保存书签并回显名称
+                shouldSaveBookmark.value = true;
+                bookmarkName.value = b.name || '';
+                editingBookmarkId.value = b.id;
+            } else {
+                // 直接点击书签连接：不需要重新保存
+                shouldSaveBookmark.value = false;
+                bookmarkName.value = '';
+                editingBookmarkId.value = null;
+            }
+            showConnectionForm.value = true;
+        };
+
+
+        const deleteBookmark = async (id) => {
+            if (confirm('确定删除该书签吗？')) {
+                const res = await apiFetch(`/api/bookmarks?id=${id}`, { method: 'DELETE' });
+                if (res.ok) fetchBookmarks();
+            }
+        };
+
+        const handleSshLogin = async () => {
+            if (!formPwd.value) return; // For simplicity, always require pwd or key during form submit
+            if (sessions.value.length >= 10) return alert('最多允许 10 个同时活跃的会话');
+            loading.value = true;
+            
+            const protectedPwd = await protectPwd(formPwd.value);
+            
+            localStorage.setItem('ssh_conf_host', formHost.value);
+            localStorage.setItem('ssh_conf_port', formPort.value);
+            localStorage.setItem('ssh_conf_user', formUser.value);
+
+            if (shouldSaveBookmark.value) {
+                const pPwd = !formIsKey.value ? protectedPwd : null;
+                const pKey = formIsKey.value ? protectedPwd : null;
+                const finalName = bookmarkName.value.trim() || `${formUser.value}@${formHost.value}`;
+
+                await apiFetch('/api/bookmarks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: editingBookmarkId.value || null,
+                        name: finalName,
+                        host: formHost.value,
+                        port: formPort.value,
+                        user: formUser.value,
+                        pwd: pPwd,
+                        key: pKey,
+                        isKeyAuth: formIsKey.value
+                    }),
+                }, null);
+                editingBookmarkId.value = null;
+                await fetchBookmarks();
+            }
+
+            const newId = 'seq_' + Date.now();
+            const newSession = {
+                id: newId,
+                name: bookmarkName.value || `${formUser.value}@${formHost.value}`,
+                host: formHost.value,
+                port: formPort.value,
+                user: formUser.value,
+                pwd: protectedPwd, // Keep protected pwd in memory
+                isKeyAuth: formIsKey.value,
+                
+                isWsDisconnected: false,
+                currentPath: '.', fileList: [], transferList: [], monitor: { cpu: 0, mem: 0, load: 0, latency: '--' }
+            };
+            sessions.value.push(newSession);
+            activeSessionId.value = newId;
+            saveSessions();
+
+            showWorkspace.value = true;
+            showConnectionForm.value = false;
+            loading.value = false;
+            
+            nextTick(() => {
+                initSessionTerminal(newSession);
+                startSessionMonitoring(newSession);
+                fetchFiles(newSession.currentPath);
+                fetchSnippets();
+                fetchTransfers();
+                fetchSystemConfig();
+            });
+        };
+
+        const apiFetch = async (url, options = {}, specificSession = undefined) => {
+            const currentToken = localStorage.getItem('visit_token');
+            const session = specificSession !== undefined ? specificSession : activeSession.value;
+            const pwdProtected = session ? session.pwd : null;
+            const isKey = session ? session.isKeyAuth : false;
+            
+            const protectedHeader = pwdProtected && !pwdProtected.startsWith('PROTECTED:AES:') && pwdProtected.includes(':') 
+                ? 'PROTECTED:AES:' + pwdProtected 
+                : pwdProtected;
+
+            const headers = {
+                'Authorization': `Bearer ${currentToken}`,
+                'X-Visit-Client': 'H5',
+                'X-SSH-Host': session ? session.host : formHost.value,
+                'X-SSH-Port': session ? session.port : formPort.value,
+                'X-SSH-User': session ? session.user : formUser.value,
+                'X-SSH-Pwd': !isKey ? protectedHeader : null,
+                'X-SSH-Key': isKey ? protectedHeader : null,
+                ...options.headers
+            };
+            try {
+                const res = await fetch(url, { ...options, headers });
+                if (res.status === 401) { 
+                    handleLogout(); 
+                    return new Promise(() => {}); 
+                }
+                if (res.status === 403) {
+                    const errorData = await res.json().catch(() => ({}));
+                    alert(errorData.message || '访问受限：无权执行此操作');
+                    throw new Error('Forbidden');
+                }
+                return res;
+            } catch (e) { throw e; }
+        };
+
+        const handleLogout = async () => {
+            sessionInstances.forEach(inst => {
+                if (inst.monitorTimer) clearInterval(inst.monitorTimer);
+                if (inst.socket) inst.socket.close();
+            });
+            try {
+                await apiFetch('/api/auth/logout', { method: 'POST' });
+            } catch (e) {}
+            if (window.AndroidBridge && window.AndroidBridge.hardLogout) {
+                window.AndroidBridge.hardLogout();
+            }
+            sessionStorage.clear();
+            localStorage.removeItem('visit_token');
+            localStorage.removeItem('visit_session_key');
+            auditLogs.value = [];
+            window.location.reload();
+        };
+
+        const handleSshDisconnect = () => {
+            showWorkspace.value = false;
+            showConnectionForm.value = false;
+        };
+
+        const startSessionMonitoring = (session) => {
+            let inst = sessionInstances.get(session.id);
+            if (!inst) {
+                inst = { term: null, socket: null, fitAddon: null, monitorTimer: null, reconnectTimer: null };
+                sessionInstances.set(session.id, inst);
+            }
+            const pull = async () => {
+                if (!sessions.value.find(s => s.id === session.id)) {
+                    const inst = sessionInstances.get(session.id);
+                    if (inst && inst.monitorTimer) clearInterval(inst.monitorTimer);
+                    return;
+                }
+                const start = Date.now();
+                try {
+                    const res = await apiFetch('/api/monitor/stats', {}, session);
+                    if (res.ok) {
+                        const body = await res.json();
+                        const data = body.data || {};
+                        data.latency = Date.now() - start;
+                        session.monitor = data;
+                        // Don't saveSessions here, it causes too many writes and reactively updates everything
+                    }
+                } catch (e) {}
+            };
+            pull();
+            inst.monitorTimer = setInterval(pull, 3000);
+        };
+
+        const initSessionTerminal = (session) => {
+            nextTick(async () => {
+                const el = document.getElementById('term-' + session.id);
+                if (!el) return;
+                
+                let inst = sessionInstances.get(session.id);
+                if (!inst) {
+                    inst = { term: null, socket: null, fitAddon: null, monitorTimer: null, reconnectTimer: null };
+                    sessionInstances.set(session.id, inst);
+                }
+                if (inst.term) return; // already inited
+                
+                inst.term = new Terminal({ 
+                    cursorBlink: true, 
+                    fontSize: 13,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    theme: { background: '#000', foreground: '#FFF' } 
+                });
+                inst.fitAddon = new FitAddon.FitAddon();
+                inst.term.loadAddon(inst.fitAddon);
+                inst.term.options.scrollback = 5000;
+                inst.term.open(el);
+                inst.fitAddon.fit();
+                
+                if (activeSessionId.value === session.id) inst.term.focus();
+
+                const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                inst.socket = new WebSocket(`${protocol}//${location.host}/ws/terminal`, ['visit-auth.' + localStorage.getItem('visit_token')]);
+                inst.socket.binaryType = 'arraybuffer';
+                
+                const pwdRaw = await revealPwd(session.pwd);
+                inst.socket.onopen = () => {
+                    session.isWsDisconnected = false;
+                    saveSessions();
+                    if (inst.reconnectTimer) clearTimeout(inst.reconnectTimer);
+                    inst.socket.send(JSON.stringify({
+                        type: 'auth',
+                        sshHost: session.host,
+                        sshPort: session.port,
+                        sshUser: session.user,
+                        sshPwd: btoa(pwdRaw),
+                        cols: inst.term.cols, rows: inst.term.rows
+                    }));
+                };
+                inst.socket.onmessage = (ev) => {
+                    if (ev.data instanceof ArrayBuffer) inst.term.write(new Uint8Array(ev.data));
+                    else inst.term.write(ev.data);
+                };
+                inst.socket.onclose = (e) => { console.error("WS CLOSED", session.id, e.code, e.reason);
+                    session.isWsDisconnected = true;
+                    saveSessions();
+                    if (inst.reconnectTimer) clearTimeout(inst.reconnectTimer);
+                    inst.reconnectTimer = setTimeout(() => {
+                        if (sessions.value.find(s => s.id === session.id)) {
+                            inst.term.dispose();
+                            inst.term = null;
+                            initSessionTerminal(session);
+                        }
+                    }, 5000);
+                };
+                inst.socket.onerror = (e) => { console.error("WS ERROR", session.id, e); inst.socket.close(); };
+
+                inst.term.onData(data => inst.socket?.readyState === 1 && inst.socket.send(data));
+                
+                el.addEventListener('click', () => {
+                    if (activeSessionId.value === session.id) inst.term.focus();
+                });
+            });
+        };
+        
+        window.addEventListener('resize', () => {
+            sessions.value.forEach(s => {
+                const inst = sessionInstances.get(s.id);
+                if (inst && inst.fitAddon) {
+                    inst.fitAddon.fit();
+                    if (inst.socket && inst.socket.readyState === 1) {
+                        inst.socket.send(JSON.stringify({ type: 'resize', cols: inst.term.cols, rows: inst.term.rows }));
+                    }
+                }
+            });
+        });
+
+        window.visitBridge = {
+            send: (cmd) => {
+                const inst = sessionInstances.get(activeSessionId.value);
+                if (inst && inst.socket && inst.socket.readyState === 1) {
+                    inst.socket.send(cmd);
+                }
+            }
+        };
+
+        const syncPathToTerm = () => {
+            const socket = activeSession.value?.socket;
+            if (socket && socket.readyState === 1) {
+                socket.send(`cd "${currentPath.value}"\r`);
+                currentTab.value = 'terminal';
+            }
+        };
+
+        const syncTermToFiles = () => {
+            sessionInstances.get(activeSessionId.value)?.socket?.send('pwd\r');
+            alert('请在终端查看当前路径后，在文件管理器中输入跳转。后续版本将支持自动解析 PS1。');
+        };
+
+        const syncFilesToTerm = async () => {
+            try {
+                const res = await apiFetch('/api/file/pwd');
+                if (res.ok) {
+                    const body = await res.json();
+                    const path = body.data?.path;
+                    if (path) fetchFiles(path);
+                }
+            } catch (e) {
+                alert('获取终端路径失败，请手动同步。');
+            }
+        };
+
+        const jumpToPath = () => {
+            const path = inputPath.value.trim();
+            if (path) fetchFiles(path);
+        };
+
+        const fetchFiles = async (path = currentPath.value) => {
+            selectedPaths.value = [];
+            try {
+                const res = await apiFetch(`/api/file/list?path=${encodeURIComponent(path)}`);
+                if (res.ok) { 
+                    const body = await res.json();
+                    fileList.value = body.data || []; 
+                    currentPath.value = path; 
+                    inputPath.value = path; 
+                    refreshIcons(); 
+                } else {
+                    alert('无法进入该目录，请检查路径是否正确');
+                    inputPath.value = currentPath.value;
+                }
+            } catch (e) {
+                console.error('List error:', e);
+            }
+        };
+
+        const handleFileClick = (f) => f.dir ? fetchFiles(f.path) : (activeFile.value = f, refreshIcons());
+        const goUp = () => fetchFiles(currentPath.value.substring(0, currentPath.value.lastIndexOf('/')) || '/');
+        
+        const formatSize = (b) => VisitUtils.formatSize(b);
+        
+        const isEditable = (n) => /\.(sh|conf|txt|yml|yaml|json|py|js|html|css|php|xml|md)$/i.test(n);
+
+        const fetchAuditLogs = async () => {
+            const res = await apiFetch('/api/audit/logs');
+            if (res.ok) { 
+                const body = await res.json();
+                auditLogs.value = body.data || []; 
+                refreshIcons(); 
+            }
+        };
+
+        const getAuditTagClass = (s) => s.includes('成功') ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600';
+
+        const openEditor = async (f) => {
+            activeFile.value = null; editingFile.value = f;
+            try {
+                const res = await apiFetch(`/api/file/content?path=${encodeURIComponent(f.path)}`, {}, activeSession.value)?path=${encodeURIComponent(f.path)}`);
+                const body = await res.json();
+                const content = body.data || '';
+                nextTick(() => {
+                    aceEditor = ace.edit("ace-editor");
+                    aceEditor.setTheme("ace/theme/chrome");
+                    aceEditor.setValue(content, -1);
+                });
+            } catch (e) { alert('读取失败'); }
+        };
+
+        const saveFile = async () => {
+            saving.value = true;
+            try {
+                await apiFetch('/api/file/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: editingFile.value.path, content: aceEditor.getValue() })
+                }, activeSession.value)
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: editingFile.value.path, content: aceEditor.getValue() }) }, activeSession.value);
+                alert('已保存');
+            } catch (e) { alert('保存失败'); }
+            saving.value = false;
+        };
+
+        const fetchTransfers = async () => {
+            try {
+                const res = await apiFetch('/api/transfers');
+                if (res.ok) {
+                    const result = await res.json();
+                    transferList.value = result.data || [];
+                }
+            } catch (e) {}
+        };
+
+        const clearTransfers = async () => {
+            if (!confirm('确定清空所有传输记录吗？')) return;
+            try {
+                const res = await apiFetch('/api/transfers', { method: 'DELETE' });
+                if (res.ok) {
+                    transferList.value = [];
+                    alert('已清空');
+                }
+            } catch (e) {}
+        };
+
+        const uploadFile = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const id = 'h5_' + Date.now();
+            const transfer = { id, name: file.name, type: 'UPLOAD', status: 'UPLOADING', progress: 0, targetPath: currentPath.value, errorMessage: '', timestamp: formatTime(new Date()) };
+            transferList.value.unshift(transfer);
+            apiFetch('/api/transfers', { method: 'POST', body: JSON.stringify(transfer), headers: {'Content-Type': 'application/json'} }).catch(()=>{});
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('path', currentPath.value);
+            try {
+                const res = await apiFetch('/api/file/upload', { method: 'POST', body: formData }, activeSession.value);
+                if (res.ok) {
+                    fetchFiles();
+                    transfer.status = 'COMPLETED';
+                    transfer.progress = 100;
+                } else {
+                    transfer.status = 'ERROR';
+                    transfer.errorMessage = '后端拒绝或网络异常';
+                }
+            } catch (err) { 
+                transfer.status = 'ERROR';
+                transfer.errorMessage = err.message || '上传失败';
+            }
+            transfer.timestamp = formatTime(new Date());
+            apiFetch('/api/transfers', { method: 'POST', body: JSON.stringify(transfer), headers: {'Content-Type': 'application/json'} }).catch(()=>{});
+        };
+
+        const downloadFile = async (f) => {
+            const id = 'h5_' + Date.now();
+            const transfer = { id, name: f.name, type: 'DOWNLOAD', status: 'DOWNLOADING', progress: 0, targetPath: currentPath.value, errorMessage: '', timestamp: formatTime(new Date()) };
+            transferList.value.unshift(transfer);
+            apiFetch('/api/transfers', { method: 'POST', body: JSON.stringify(transfer), headers: {'Content-Type': 'application/json'} }).catch(()=>{});
+
+            try {
+                const res = await apiFetch(`/api/file/token?path=${encodeURIComponent(f.path)}`, { method: 'GET' }, activeSession.value);
+                if (res.ok) {
+                    const { data } = await res.json();
+                    window.open(`/api/file/download?token=${data.token}`);
+                    transfer.status = 'COMPLETED';
+                    transfer.progress = 100;
+                } else {
+                    transfer.status = 'ERROR';
+                    transfer.errorMessage = '获取下载令牌失败';
+                }
+            } catch (err) { 
+                transfer.status = 'ERROR';
+                transfer.errorMessage = err.message || '下载失败';
+            }
+            transfer.timestamp = formatTime(new Date());
+            apiFetch('/api/transfers', { method: 'POST', body: JSON.stringify(transfer), headers: {'Content-Type': 'application/json'} }).catch(()=>{});
+        };
+
+        const handleBatchDelete = async () => {
+            if (!confirm(`确定要批量删除这 ${selectedPaths.value.length} 个项目吗？`)) return;
+            try {
+                const res = await apiFetch('/api/file/bulk-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(selectedPaths.value) }, activeSession.value);
+                if (res.ok) {
+                    selectedPaths.value = [];
+                    fetchFiles();
+                }
+            } catch (e) { alert('批量删除失败'); }
+        };
+
+        const renameFile = async (f) => {
+            const newName = prompt('重命名为:', f.name);
+            if (newName && newName !== f.name) {
+                try {
+                    const res = await apiFetch(`/api/file/rename?oldPath=${encodeURIComponent(f.path)}&newName=${encodeURIComponent(newName)}`, { method: 'PUT' }, activeSession.value);
+                    if (res.ok) fetchFiles();
+                } catch (e) { alert('重命名失败'); }
+            }
+        };
+
+        const confirmDelete = async (f) => {
+            if (confirm(`确认永久删除 ${f.name} 吗？`)) {
+                try {
+                    const res = await apiFetch(`/api/file?path=${encodeURIComponent(f.path)}`, { method: 'DELETE' }, activeSession.value);
+                    if (res.ok) { activeFile.value = null; fetchFiles(); }
+                } catch (e) { alert('删除失败'); }
+            }
+        };
+
+        onMounted(() => {
+            // [PHYSICAL FIX] 混合架构对齐：如果处于原生容器环境且本地无 Token，则自动从原生 Bridge 同步状态
+            if (!isWebLoggedIn.value && window.AndroidBridge) {
+                const nativeToken = window.AndroidBridge.getToken();
+                const nativeKey = window.AndroidBridge.getSessionKey();
+                if (nativeToken) {
+                    localStorage.setItem('visit_token', nativeToken);
+                    if (nativeKey) localStorage.setItem('visit_session_key', nativeKey);
+                    isWebLoggedIn.value = true;
+                }
+            }
+            
+            refreshIcons();
+            if (isWebLoggedIn.value) {
+                if (sessions.value.length > 0) {
+                    sessions.value.forEach(s => {
+                        initSessionTerminal(s);
+                        startSessionMonitoring(s);
+                    });
+                    showWorkspace.value = true;
+                }
+                fetchBookmarks();
+            }
+        });
+
+        watch(currentTab, (v) => {
+            if (v === 'terminal') nextTick(() => fitAddon?.fit());
+            if (v === 'audit') fetchAuditLogs();
+            refreshIcons();
+        });
+
+        // 从编辑表单返回书签列表时，重新 fetch 确保 v-html SVG 图标正常渲染
+        watch(showConnectionForm, (isForm) => {
+            if (!isForm && isWebLoggedIn.value) {
+                fetchBookmarks();
+            }
+        });
+
+        return {
+            isWebLoggedIn, webPwd, showWorkspace, sessions, activeSessionId, activeSession, switchSession, closeSession, formHost, formPort, formUser, formPwd, loading, 
+            currentTab, terminalEl, coreShortcuts, currentPath, fileList, transferList, activeFile, monitor,
+            editingFile, saving, focusTerminal, syncPathToTerm, jumpToPath, inputPath,
+            handleWebLogin, handleSshLogin, handleLogout, handleSshDisconnect, sendKey: (v) => sessionInstances.get(activeSessionId.value)?.socket?.send(v), 
+            handleFileClick, goUp, formatSize, isEditable, openEditor, saveFile, 
+            closeEditor: () => (editingFile.value = null, refreshIcons()),
+            auditLogs, getAuditTagClass, openMenu: (f) => (activeFile.value = f, refreshIcons()),
+            uploadFile, downloadFile, renameFile, confirmDelete, clearTransfers,
+            showConnectionForm,
+            getBookmarkIcon, getBookmarkColor, getBookmarkEmoji,
+            selectedPaths, formIsKey, bookmarks, shouldSaveBookmark, bookmarkName, editingBookmarkId, isWsDisconnected,
+            useBookmark, deleteBookmark, snippets, executeSnippet, syncTermToFiles, syncFilesToTerm, handleBatchDelete,
+            systemConfig, toggleH5, updateAuditRetention, wipeAllData,
+            showSnippetManager, editingSnippet, editingSnippetIndex, openSnippetEditor, saveSnippet, deleteSnippet, refreshIcons
+        }
+    }
+}).mount('#app');
+</script>
+</body>
+</html>

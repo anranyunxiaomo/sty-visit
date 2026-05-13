@@ -1,0 +1,32 @@
+server:
+  port: 8080
+  config_dir: config
+
+auth:
+  # 管理面板登录密码 (首道防线)
+  admin_password: "StyVisit@2026"
+  # JWT 会话签名密钥 (长度需 > 24位)
+  jwt_secret: "StyVisit_SecureKey_@2026!#Secure_Production"
+
+ssh:
+  # SSH 隧道目标配置 (通常保持 127.0.0.1 即可，由面板代理访问本机)
+  host: 127.0.0.1
+  port: 22
+  strict_host_key_check: false
+  # 允许同时在线的最大 SSH 会话数
+  max_sessions: 50
+  nodes:
+    - id: "node-local"
+      name: "本地网关 (Local)"
+      host: "127.0.0.1"
+      port: 22
+      user: "root"
+    - id: "node-db"
+      name: "内网数据库 (DB)"
+      host: "192.168.1.10"
+      port: 22
+      user: "admin"
+
+audit:
+  # 审计日志物理保留天数
+  retention_days: 7

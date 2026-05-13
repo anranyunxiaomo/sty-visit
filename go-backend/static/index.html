@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>天穹</title>
+    <link rel="stylesheet" href="/apple-ui.css?v=5" />
+    <script src="/lib/vue.js"></script>
+    <link rel="stylesheet" href="/lib/xterm.css" />
+    <script src="/lib/xterm.js"></script>
+    <script src="/lib/xterm-addon-fit.js"></script>
+    <script src="/lib/lucide.js"></script>
+    <script src="/lib/ace.js"></script>
+    <script src="/lib/utils.js?v=2"></script>
+    <style>
+        #hidden-input { position: absolute; opacity: 0; pointer-events: none; z-index: -1; }
+        .progress-ring { transform: rotate(-90deg); }
+        .progress-ring-circle { transition: stroke-dashoffset 0.6s ease; stroke: var(--color-accent); }
+        .star-btn-unpinned { color: var(--color-text-tertiary); }
+        .star-btn-unpinned:hover { color: #F59E0B !important; background: rgba(245,158,11,0.1) !important; }
+        .star-btn-pinned { color: #F59E0B !important; background: rgba(245,158,11,0.1) !important; }
+        .star-btn-pinned svg { fill: #F59E0B !important; stroke: #F59E0B !important; }
+        :root {
+            --color-bg-base: #F5F5F7;
+            --color-bg-card: #FFFFFF;
+            --color-accent: #007AFF;
+            --color-accent-light: rgba(0, 122, 255, 0.1);
+            --color-text-primary: #1D1D1F;
+            --color-text-secondary: #86868B;
+            --color-text-tertiary: #A1A1A6;
+            --color-separator: rgba(0,0,0,0.08);
+            --color-fill-2: rgba(0,0,0,0.05);
+            --color-fill-3: rgba(0,0,0,0.03);
+            --color-success: #34C759;
+            --color-red: #FF3B30;
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px; --sp-8: 32px;
+            --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-full: 999px;
+            --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, monospace;
+            --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 10px 24px rgba(0,0,0,0.12);
+            --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .snippet-tag { background: var(--color-fill-2); border-radius: var(--radius-xs); padding: 6px 12px; font-size: var(--text-caption1); font-weight: 600; color: var(--color-text-primary); white-space: nowrap; display: inline-flex; align-items: center; position: relative; }
+        .bookmark-delete { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; background: var(--color-red); color: white; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 10px; box-shadow: var(--shadow-sm); }
+        .sidebar { width: 72px; background: var(--color-bg-base); border-right: 1px solid var(--color-separator); display: flex; flex-direction: column; align-items: center; padding: var(--sp-6) 0; z-index: 100; transition: width 0.3s var(--ease-spring); }
+        .tab-item { width: 48px; height: 48px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--color-text-secondary); transition: all 0.3s var(--ease-spring); margin-bottom: var(--sp-4); position: relative; }
+        .tab-item:hover { background: var(--color-fill-2); color: var(--color-text-primary); }
+        .tab-item.is-active { background: var(--color-accent); color: white; box-shadow: 0 8px 16px rgba(0, 122, 255, 0.25); transform: translateY(-2px); }
+        .tab-item span { font-size: 10px; font-weight: 700; margin-top: 4px; }
+        .tab-item i { transform: scale(0.9); }
+        .tab-item::after { content: ''; position: absolute; left: -12px; top: 25%; height: 50%; width: 3px; background: var(--color-accent); border-radius: 0 4px 4px 0; opacity: 0; transition: all 0.3s var(--ease-spring); }
+        .tab-item.is-active::after { opacity: 1; transform: translateX(12px); }
+        .snippet-tag:hover .bookmark-delete { display: flex; }
+        
+        .sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 500; backdrop-filter: blur(8px); animation: fadeIn 0.2s ease forwards; }
+        .sheet { background: var(--color-bg-base); width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: var(--sp-4); animation: sheetUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; box-shadow: 0 -4px 20px rgba(0,0,0,0.1); }
+        .sheet-handle { width: 36px; height: 5px; border-radius: 3px; background: var(--color-fill-2); margin: 0 auto var(--sp-4); }
+        @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* 自定义高级弹窗样式 */
+        .modal-container { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.2s ease; }
+        .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); }
+        .modal-content { position: relative; background: var(--color-bg-card); border-radius: 20px; width: 100%; max-width: 380px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); transform: scale(1); animation: modalScale 0.3s var(--ease-spring); }
+        @keyframes modalScale { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal-btn { height: 44px; border-radius: 12px; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .modal-btn-primary { background: var(--color-accent); color: white; }
+        .modal-btn-primary:active { transform: scale(0.96); opacity: 0.9; }
+        .modal-btn-secondary { background: var(--color-fill-2); color: var(--color-text-primary); }
+        .modal-btn-danger { background: var(--color-red); color: white; }
+
+        /* 分屏布局核心样式 - 仅针对终端和文件模块 */
+        .split-view-active { display: flex !important; flex-direction: row !important; height: 100% !important; overflow: hidden !important; background: var(--color-bg-base); }
+        .split-view-active > .terminal-view, 
+        .split-view-active > .files-view { 
+            flex: 1 !important; 
+            width: 50% !important; 
+            border-right: 1px solid var(--color-separator); 
+            display: flex !important; 
+            flex-direction: column !important; 
+        }
+        .split-view-active > .files-view { border-right: none; }
+        @media (max-width: 1024px) {
+            .split-view-active { flex-direction: column !important; }
+            .split-view-active > .terminal-view,
+            .split-view-active > .files-view { width: 100% !important; height: 50% !important; border-right: none; border-bottom: 1px solid var(--color-separator); }
+        }
+
+        /* 审计日志列表样式 */
+        .log-card { background: var(--color-bg-card); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow-sm); transition: transform 0.2s, box-shadow 0.2s; border: 1px solid var(--color-separator); }
+        .log-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .log-time { font-size: 13px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+        .log-title { font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 4px; word-break: break-all; }
+        .log-detail { font-size: 13px; color: var(--color-text-tertiary); font-family: var(--font-mono); word-break: break-all; }
+        .badge { padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; letter-spacing: -0.2px; }
+        .badge-green { background: rgba(52, 199, 89, 0.1); color: #34C759; }
+        .badge-red { background: rgba(255, 59, 48, 0.1); color: #FF3B30; }
+    </style>
+</head>
+<body class="app-container">
+
+<div id="app" class="h-full flex flex-col">
+    <input type="text" id="hidden-input" autocorrect="off" autocapitalize="off">
+
+    <!-- 1. 登录页面 -->
+    <div v-if="!isWebLoggedIn" class="flex flex-1 flex-col items-center justify-center px-6 w-full">
+        <div class="mb-8 text-center">
+            <div style="width:80px;height:80px;border-radius:18px;margin:0 auto var(--sp-4);overflow:hidden;box-shadow:var(--shadow-sm);">
+                <img src="/logo.png" alt="天穹" style="width:100%;height:100%;object-fit:cover;display:block;">
+            </div>
+            <h1 style="font-size:var(--text-title1);font-weight:700;">天穹</h1>
+            <p style="color:var(--color-text-secondary);margin-top:var(--sp-1);">系统鉴权，触手可及</p>
+        </div>
+        <div class="w-full" style="max-width: 320px;">
+            <div class="space-y-4">
+                <input type="password" v-model="webPwd" @keyup="(e) => { if(e.key === 'Enter') handleWebLogin(); }" placeholder="管理认证 Key" class="input text-center">
+                <button type="button" @click="handleWebLogin" :disabled="loading" class="btn btn-primary w-full" style="box-shadow:var(--shadow-sm);">
+                    {{ loading ? '校验中...' : '进入系统' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 全局应用容器与导航 -->
+    <div v-show="isWebLoggedIn" class="layout-wrapper">
+        <!-- 恒定可见的左侧边栏 -->
+        <div class="sidebar">
+            <button type="button" @click="showWorkspace = true; currentTab = 'terminal'" class="tab-item" :class="{'is-active': showWorkspace && currentTab === 'terminal'}">
+                <i data-lucide="terminal" style="width:24px;height:24px;"></i>
+                <span>终端</span>
+            </button>
+            <button type="button" v-show="!isSplitMode" @click="showWorkspace = true; currentTab = 'files'" class="tab-item" :class="{'is-active': showWorkspace && currentTab === 'files'}">
+                <i data-lucide="folder" style="width:24px;height:24px;"></i>
+                <span>文件</span>
+            </button>
+            <button type="button" @click="showWorkspace = true; currentTab = 'transfer'" class="tab-item" :class="{'is-active': showWorkspace && currentTab === 'transfer'}">
+                <i data-lucide="download-cloud" style="width:24px;height:24px;"></i>
+                <span>传输</span>
+            </button>
+            <button type="button" @click="showWorkspace = true; currentTab = 'docker'" class="tab-item" :class="{'is-active': showWorkspace && currentTab === 'docker'}">
+                <i data-lucide="box" style="width:24px;height:24px;"></i>
+                <span>容器</span>
+            </button>
+            <button type="button" @click="showWorkspace = true; currentTab = 'audit'" class="tab-item" :class="{'is-active': showWorkspace && currentTab === 'audit'}">
+                <i data-lucide="activity" style="width:24px;height:24px;"></i>
+                <span>审计</span>
+            </button>
+            <button type="button" @click="showWorkspace = true; currentTab = 'batch'" class="tab-item" :class="{'is-active': showWorkspace && currentTab === 'batch'}">
+                <i data-lucide="layers" style="width:24px;height:24px;"></i>
+                <span>批量</span>
+            </button>
+            <button type="button" @click="showWorkspace = true; currentTab = 'snippets'" class="tab-item" :class="{'is-active': showWorkspace && currentTab === 'snippets'}">
+                <i data-lucide="command" style="width:24px;height:24px;"></i>
+                <span>指令</span>
+            </button>
+            <button type="button" @click="handleSshDisconnect" class="tab-item" :class="{'is-active': !showWorkspace}" style="margin-top:auto;color:var(--color-text-secondary);background:var(--color-fill-2);">
+                <i data-lucide="library" style="width:24px;height:24px;"></i>
+                <span>书签</span>
+            </button>
+        </div>
+
+        <!-- 书签广场视图 -->
+        <div v-show="!showWorkspace" class="layout-main" style="flex:1;">
+            <!-- 统一顶部导航栏 -->
+            <div class="nav-bar justify-between items-center" style="border-bottom:0.5px solid var(--color-separator);background:var(--glass-bg);">
+                <div class="flex items-center space-x-2">
+                    <img src="/logo.png" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">
+                    <span style="font-weight:700;font-size:var(--text-headline);">天穹管理系统</span>
+                </div>
+                <button type="button" @click="isWebLoggedIn = false; localStorage.removeItem('visit_token')" class="flex items-center gap-1 text-secondary hover:text-primary transition-colors" style="font-size:var(--text-sub);">
+                    <i data-lucide="log-out" style="width:16px;height:16px;"></i> 注销
+                </button>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="flex-1 overflow-y-auto px-6 py-10">
+                <!-- 书签广场视图 -->
+                <div v-if="!showConnectionForm && !showBatchAddForm" class="w-full max-w-4xl mx-auto">
+                    <div class="flex justify-between items-end mb-8">
+                        <div>
+                            <div class="flex items-center space-x-4">
+                                <h2 style="font-size:var(--text-title1);font-weight:700;">会话管理器</h2>
+                                
+                        <button @click="toggleTheme" class="btn btn-secondary text-accent" style="padding: 8px;" title="切换主题">
+                            <i :data-lucide="currentTheme === 'dark' ? 'sun' : 'moon'" style="width:16px;height:16px;"></i>
+                        </button>
+                        <button v-if="sessions.length > 0"
+ @click="showWorkspace = true" class="btn btn-secondary" style="height:28px;padding:0 12px;font-size:12px;border-radius:14px;"><i data-lucide="terminal" style="width:12px;height:12px;margin-right:4px;"></i>运行中 ({{sessions.length}})</button>
+                            </div>
+                            <p style="color:var(--color-text-secondary);margin-top:2px;">选择或创建一个新的 SSH 会话</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button @click="showBatchAddForm = true; batchAddForm = {port:'22', user:'root', pwd:'', list:''}" class="btn btn-secondary" style="height:40px;padding:0 20px;border-radius:var(--radius-full);font-size:14px;background:var(--color-fill-2);">
+                                <i data-lucide="layers" style="width:16px;height:16px;margin-right:4px;"></i> 批量新增
+                            </button>
+                            <button @click="showConnectionForm = true; formHost=''; formUser='root'; formPwd=''" class="btn btn-primary" style="height:40px;padding:0 20px;border-radius:var(--radius-full);font-size:14px;">
+                                <i data-lucide="plus" style="width:16px;height:16px;margin-right:4px;"></i> 新建连接
+                            </button>
+                        </div>
+                    </div>
+
+                    
+                    <div v-if="jumpServerHosts && jumpServerHosts.length > 0" class="mb-10">
+                        <div class="flex items-center mb-4">
+                            <i data-lucide="layers" style="width:20px;height:20px;color:var(--color-accent);margin-right:8px;"></i>
+                            <h3 style="font-size:16px;font-weight:700;">跳板机内网资产</h3>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            <div v-for="h in jumpServerHosts" :key="h.id" @click="formHost=h.host; formPort=h.port; formUser=h.user; bookmarkName=h.name; showConnectionForm=true" class="card-glass relative flex flex-col cursor-pointer hover:border-accent group transition-all" style="padding:var(--sp-4);">
+                                <div class="flex items-start justify-between mb-3">
+                                    <div style="width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--color-fill-2);color:var(--color-text-primary);">
+                                        <i data-lucide="server" style="width:20px;height:20px;"></i>
+                                    </div>
+                                    <span class="badge badge-green" style="font-size:10px;">{{h.id}}</span>
+                                </div>
+                                <span style="font-size:16px;font-weight:600;color:var(--color-text-primary);" class="truncate">{{ h.name }}</span>
+                                <span style="font-size:12px;color:var(--color-text-tertiary);" class="truncate">{{ h.user }}@{{ h.host }}:{{ h.port }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center mb-4">
+                        <i data-lucide="bookmark" style="width:20px;height:20px;color:var(--color-purple);margin-right:8px;"></i>
+                        <h3 style="font-size:16px;font-weight:700;">我的书签</h3>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+
+                <div v-for="b in bookmarks" :key="b.id" @click="if(!loading) { loading=true; useBookmark(b).then(() => { loading=false; handleSshLogin(b.id); }).catch(() => loading=false); }" class="card relative flex flex-col cursor-pointer hover:border-accent group transition-all" style="padding:var(--sp-4);background:var(--color-bg-card);">
+                    <div class="flex items-start justify-between mb-3">
+                        <div :style="'width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:' + getBookmarkColor(b.id).bg">
+                            <span :style="'font-size:20px;line-height:1;user-select:none;'">{{ getBookmarkEmoji(b.id) }}</span>
+                        </div>
+                        <div class="flex space-x-1">
+                            <button @click.stop="useBookmark(b, true); showConnectionForm = true" class="p-2 text-tertiary hover:text-accent" style="padding:6px;border-radius:8px;"><span style="font-size:14px;">✏️</span></button>
+                            <button @click.stop="deleteBookmark(b.id)" class="p-2 text-tertiary hover:text-red" style="padding:6px;border-radius:8px;"><span style="font-size:14px;">🗑️</span></button>
+                        </div>
+                    </div>
+                    <span style="font-size:16px;font-weight:600;color:var(--color-text-primary);" class="truncate">{{ b.name }}</span>
+                    <span style="font-size:12px;color:var(--color-text-tertiary);" class="truncate">{{ b.user }}@{{ b.host }}:{{ b.port }}</span>
+                    <div v-if="b.os" style="margin-top: 14px; display: flex; align-items: center; gap: 10px; background: var(--color-fill-2); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--color-separator); transition: all 0.3s ease;" class="hover:border-accent group-hover:bg-accent-light">
+                        <div style="width: 28px; height: 28px; border-radius: 8px; background: var(--color-bg-card); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-xs);">
+                            <i data-lucide="cpu" style="width: 14px; height: 14px; color: var(--color-accent);"></i>
+                        </div>
+                        <div class="flex-1" style="min-width: 0;">
+                            <div style="font-size:10px; font-weight:700; color:var(--color-text-tertiary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">System OS</div>
+                            <div style="font-size:11px; font-weight:600; color:var(--color-text-primary); line-height:1.4; word-break: break-word; white-space: normal;">{{ b.os }}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div v-if="bookmarks.length === 0" @click="showConnectionForm = true" class="card-inset border-dashed flex flex-col items-center justify-center py-12 cursor-pointer" style="border:2px dashed var(--color-separator);background:none;">
+                    <i data-lucide="plus-circle" style="width:32px;height:32px;color:var(--color-text-tertiary);margin-bottom:8px;"></i>
+                    <p style="color:var(--color-text-tertiary);font-weight:600;">添加首个服务器书签</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 新建/编辑连接表单 -->
+        <div v-else-if="showConnectionForm" class="card w-full max-w-md mx-auto" style="padding: var(--sp-6);">
+            <div class="flex items-center mb-6">
+                <button @click="showConnectionForm = false; editingBookmarkId = null" class="mr-4 text-secondary"><i data-lucide="arrow-left" style="width:24px;height:24px;"></i></button>
+                <h2 style="font-size:var(--text-title2);font-weight:600;">会话属性</h2>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="flex space-x-3">
+                    <div class="flex-1">
+                        <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">主机地址</label>
+                        <input type="text" v-model="formHost" placeholder="127.0.0.1" class="input">
+                    </div>
+                    <div style="width:90px;">
+                        <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">端口</label>
+                        <input type="text" v-model="formPort" placeholder="22" class="input text-center">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">登录用户</label>
+                    <input type="text" v-model="formUser" placeholder="root" class="input">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">身份凭据</label>
+                    <textarea v-model="formPwd" placeholder="密码或私钥内容..." class="input" style="resize:none;height:100px;font-family:monospace;font-size:12px;"></textarea>
+                    <div class="flex justify-between items-center mt-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" v-model="formIsKey" style="margin-right:8px;">
+                            <span style="font-size:13px;color:var(--color-text-secondary);">使用 SSH 密钥</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" v-model="shouldSaveBookmark" style="margin-right:8px;">
+                            <span style="font-size:13px;color:var(--color-accent);font-weight:600;">保存书签</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div v-if="shouldSaveBookmark" class="animate-in slide-in-from-top-2">
+                    <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">书签名称</label>
+                    <input type="text" v-model="bookmarkName" placeholder="例如：生产数据库" class="input">
+                </div>
+
+                <div class="flex space-x-3 mt-6">
+                    <button type="button" @click="showConnectionForm = false; editingBookmarkId = null" class="btn flex-1" style="background:var(--color-fill-2);color:var(--color-text-primary);">取消</button>
+                    <button type="button" @click="handleSshLogin" class="btn btn-primary flex-1" :disabled="loading">
+                        {{ loading ? '连接中...' : '立即连接' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 批量添加书签表单 -->
+        <div v-else-if="showBatchAddForm" class="card w-full max-w-2xl mx-auto" style="padding: var(--sp-6);">
+            <div class="flex items-center mb-6">
+                <button @click="showBatchAddForm = false" class="mr-4 text-secondary"><i data-lucide="arrow-left" style="width:24px;height:24px;"></i></button>
+                <h2 style="font-size:var(--text-title2);font-weight:600;">批量新增书签</h2>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="flex space-x-3">
+                    <div style="width:120px;">
+                        <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">默认端口</label>
+                        <input type="text" v-model="batchAddForm.port" placeholder="22" class="input">
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">默认账号</label>
+                        <input type="text" v-model="batchAddForm.user" placeholder="root" class="input">
+                    </div>
+                    <div style="flex: 1.5;">
+                        <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:4px;">全局密码/密钥</label>
+                        <input type="text" v-model="batchAddForm.pwd" placeholder="留空则从清单获取" class="input" style="font-family:monospace;">
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between items-end mb-1">
+                        <label style="font-size:12px;color:var(--color-text-tertiary);font-weight:600;display:block;margin-bottom:0;">目标服务器清单</label>
+                        <span style="font-size:12px;color:var(--color-text-tertiary);">格式: IP[:Port,User,Pwd]</span>
+                    </div>
+                    <textarea v-model="batchAddForm.list" placeholder="172.16.20.56&#10;172.16.20.57" class="input" style="resize:none;height:200px;font-family:monospace;font-size:13px;line-height:1.5;"></textarea>
+                </div>
+
+                <div class="flex space-x-3 mt-6">
+                    <button type="button" @click="showBatchAddForm = false" class="btn flex-1" style="background:var(--color-fill-2);color:var(--color-text-primary);">取消</button>
+                    <button type="button" @click="handleBatchAddBookmarks" class="btn btn-primary flex-1" :disabled="loading">
+                        {{ loading ? '处理中...' : '确认批量添加' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+    
+    <!-- 3. 工作区视图 -->
+    <div v-show="showWorkspace" class="layout-main" style="flex:1;">
+                <div class="nav-bar" v-show="['terminal', 'files', 'monitor', 'docker'].includes(currentTab)" style="padding-bottom: 0; gap: var(--sp-2); flex-direction: column; align-items: stretch; border-bottom: none; background: var(--color-bg-base); transition: all 0.3s var(--ease-spring);">
+                    <div class="flex justify-between items-center w-full">
+                        <div class="flex items-center space-x-2">
+                            <span style="font-weight:700;font-size:var(--text-headline);">工作区</span>
+                        </div>
+                        <button type="button" @click="handleLogout" class="btn btn-secondary" style="height:28px;padding:0 12px;border-radius:var(--radius-full);font-size:12px;font-weight:600;color:var(--color-red);">
+                            <i data-lucide="log-out" style="width:14px;height:14px;margin-right:4px;"></i> 退出
+                        </button>
+                    </div>
+                    
+                    <div class="flex overflow-x-auto no-scrollbar w-full items-end" style="border-bottom: 0.5px solid var(--color-separator); gap: 6px;">
+                        <div v-for="s in sessions" :key="s.id" 
+                             @click="switchSession(s.id)"
+                             class="flex items-center justify-between cursor-pointer transition-all group"
+                             :style="activeSessionId === s.id ? 'height:44px;padding:0 12px 0 14px;background:var(--color-bg-card);border:0.5px solid var(--color-separator);border-bottom:none;border-radius:12px 12px 0 0;font-weight:600;color:var(--color-text-primary);box-shadow: 0 -2px 8px rgba(0,0,0,0.02); position:relative; bottom:-1px; z-index:2;' : 'height:40px;padding:0 12px 0 14px;background:var(--color-fill-3);color:var(--color-text-secondary);border-radius:10px 10px 0 0;font-weight:500; margin-bottom: 1px;'">
+                             
+                            <div class="flex items-center" style="min-width:0;">
+                                <div class="w-1.5 h-1.5 rounded-full mr-2 flex-shrink-0" :style="s.isWsDisconnected ? 'background:var(--color-red);' : 'background:var(--color-success);'"></div>
+                                <div class="flex flex-col" style="min-width:0;">
+                                    <!-- 主要标识：书签名 或 user -->
+                                    <span class="truncate" style="max-width:120px;font-size:12px;font-weight:700;line-height:1.3;">
+                                        {{ (s.name && s.name !== (s.user + '@' + s.host) && s.name !== s.user) ? s.name + ' (' + s.user + ')' : s.user }}
+                                    </span>
+                                    <!-- 辅助：始终显示 IP -->
+                                    <span class="truncate" style="max-width:120px;font-size:10px;color:var(--color-text-tertiary);font-family:var(--font-mono);line-height:1.2;">{{ s.host }}:{{ s.port || 22 }}</span>
+                                </div>
+                            </div>
+                            
+                            <div @click.stop="closeSession(s.id)" class="ml-3 w-5 h-5 flex items-center justify-center rounded-full transition-opacity flex-shrink-0" :class="activeSessionId === s.id ? 'opacity-100 hover:bg-black hover:bg-opacity-10 dark:hover:bg-white dark:hover:bg-opacity-20' : 'opacity-0 group-hover:opacity-100 hover:bg-black hover:bg-opacity-10'">
+                                <span style="font-size:12px;">✖</span>
+                            </div>
+                        </div>
+                        
+                        <div @click="showWorkspace = false; showConnectionForm = false" class="flex items-center justify-center cursor-pointer transition-colors hover:text-accent" style="height:32px;width:32px;margin-bottom:1px;color:var(--color-text-tertiary);border-radius:8px;">
+                            <i data-lucide="plus" style="width:18px;height:18px;"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="main-content" :class="{'split-view-active': isSplitMode && (currentTab === 'terminal' || currentTab === 'files')}">
+            <!-- 终端视图 -->
+            <div v-show="currentTab === 'terminal' || (isSplitMode && currentTab === 'files')" class="terminal-view flex-1 flex flex-col overflow-hidden relative" style="background: var(--color-bg-base);">
+                <!-- 终端模块独立头部 -->
+                <div class="px-6 py-4 flex items-center justify-between" style="background: var(--color-bg-base);">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center shadow-md mr-4" style="background: linear-gradient(135deg, #1D1D1F, #434343);">
+                            <span style="font-size: 18px;">🐚</span>
+                        </div>
+                        <div>
+                            <h2 style="font-weight:700; font-size:16px; color:var(--color-text-primary);">远程终端</h2>
+                            <p style="color:var(--color-text-secondary); font-size:11px;">{{ activeSession?.name || '未连接' }}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button @click="toggleSplitMode" class="btn btn-secondary btn-sm" :class="{'text-accent': isSplitMode}" title="开启/关闭分屏模式">
+                            <span style="font-size:14px; margin-right:4px;">{{ isSplitMode ? '🗗' : '🗖' }}</span> {{ isSplitMode ? '退出分屏' : '分屏显示' }}
+                        </button>
+                        <button @click="inspectServer()" class="btn btn-secondary btn-sm flex items-center" style="font-size:11px;" :disabled="activeSession?.inspecting">
+                            <span v-if="activeSession?.inspecting" class="mr-1">⏳</span>
+                            <span v-else class="mr-1">⚡️</span>
+                            {{ activeSession?.inspecting ? '探测中...' : '环境快照' }}
+                        </button>
+                        <button @click="syncTermToFiles" class="btn btn-secondary btn-sm" style="font-size:11px;">同步至文件</button>
+                    </div>
+                </div>
+
+                <div style="padding:var(--sp-2) var(--sp-4);display:flex;align-items:center;gap:var(--sp-2);background:var(--color-bg-card);border-top:0.5px solid var(--color-separator);border-bottom:0.5px solid var(--color-separator);">
+                    <div class="flex-1 flex gap-2 hide-scroll" style="min-width:0; overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none;">
+                        <!-- Hide scrollbar for webkit (Chrome/Safari) -->
+                        <style>
+                            .hide-scroll::-webkit-scrollbar { display: none; }
+                        </style>
+                        <div v-if="displayedPinnedSnippets.length === 0" class="text-tertiary flex items-center h-full" style="font-size:12px; font-style:italic;">暂无置顶指令，去右侧管理中添加</div>
+                        <div v-for="s in displayedPinnedSnippets" :key="s.name" @click="executeSnippet(s)" class="snippet-tag cursor-pointer hover:bg-accent-light hover:text-accent transition-colors" style="white-space:nowrap; flex-shrink:0;">
+                            {{ s.name }}
+                        </div>
+                    </div>
+                    <div style="flex-shrink:0; display:flex; align-items:center;">
+                        <div style="width:1px;height:20px;background:var(--color-separator);margin:0 8px;"></div>
+                        <button @click="openSnippetManager()" class="flex items-center gap-1 text-tertiary font-bold hover:text-accent transition-colors" style="font-size:11px;white-space:nowrap;">
+                            <i data-lucide="settings" style="width:14px;height:14px;"></i> 指令库管理
+                        </button>
+                    </div>
+                </div>
+
+                <div class="terminal-container relative">
+                    <!-- 环境探测快照浮层 -->
+                    <div v-if="activeSession?.inspectData" class="absolute card-glass transition-all shadow-xl" style="top: 16px; right: 16px; z-index: 50; width: 280px; padding: 16px; background: rgba(25, 25, 28, 0.65); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.1); color: #fff; font-size: 11px;">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="font-bold text-accent flex items-center" style="font-size: 12px;">环境快照</h3>
+                            <button @click="activeSession.inspectData = null" class="hover:text-white transition-colors" style="color:var(--color-text-tertiary);">✕</button>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div class="flex justify-between"><span style="color:var(--color-text-tertiary);">系统内核</span> <span class="font-mono truncate text-right" style="margin-left: 8px; font-size: 10px; max-width: 160px;" :title="activeSession.inspectData.os">{{activeSession.inspectData.os}}</span></div>
+                            <div class="flex justify-between"><span style="color:var(--color-text-tertiary);">运行时间</span> <span class="font-mono">{{activeSession.inspectData.uptime}}</span></div>
+                            <div class="flex justify-between">
+                                <span style="color:var(--color-text-tertiary);">内存消耗</span> 
+                                <span class="font-mono">{{activeSession.inspectData.memUsed}}M / {{activeSession.inspectData.memTotal}}M</span>
+                            </div>
+                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                <span class="block" style="margin-bottom: 8px; color:var(--color-text-tertiary);">发现的服务进程:</span>
+                                <div class="flex flex-wrap" style="gap: 6px;">
+                                    <span v-if="!activeSession.inspectData.services || activeSession.inspectData.services==='N/A' || activeSession.inspectData.services.trim()===''" style="color:var(--color-text-tertiary);">未扫描到特定中间件</span>
+                                    <span v-for="srv in activeSession.inspectData.services.split(' ').filter(Boolean)" v-else :key="srv" style="padding: 4px 8px; border-radius: 4px; background: rgba(10, 132, 255, 0.15); color: var(--color-accent); border: 1px solid rgba(10, 132, 255, 0.3); font-size: 10px; font-weight: 600; text-transform: uppercase;">{{srv}}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-for="s in sessions" :key="s.id" :id="'term-' + s.id" :style="activeSessionId === s.id ? 'position:absolute;inset:0;z-index:10;opacity:1;' : 'position:absolute;inset:0;z-index:1;opacity:0;pointer-events:none;'"></div>
+                    <div v-if="isWsDisconnected" class="absolute flex-col items-center justify-center" style="inset:0;background:rgba(0,0,0,0.6);z-index:20;display:flex;">
+                        <i data-lucide="wifi-off" style="color:rgba(255,255,255,0.5);width:40px;height:40px;margin-bottom:12px;"></i>
+                        <span style="color:white;font-weight:600;">链路中断重试中...</span>
+                    </div>
+                </div>
+                
+                <div style="padding:var(--sp-2) var(--sp-4);display:flex;gap:var(--sp-2);overflow-x:auto;" class="no-scrollbar">
+                    <button type="button" @click="focusTerminal" style="height:36px;padding:0 var(--sp-3);border-radius:var(--radius-sm);background:var(--color-accent-light);color:var(--color-accent);font-weight:600;font-size:var(--text-caption1);display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                        <i data-lucide="keyboard" style="width:16px;height:16px;"></i> 聚焦终端
+                    </button>
+                    <div style="width:1px;background:var(--color-separator);flex-shrink:0;"></div>
+                    <button type="button" v-for="key in coreShortcuts" :key="key.label" @click="sendKey(key.val)" style="height:36px;padding:0 var(--sp-3);border-radius:var(--radius-sm);background:var(--color-bg-card);font-weight:600;font-size:var(--text-caption1);box-shadow:var(--shadow-xs);flex-shrink:0;">
+                        {{ key.label }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- 文件管理视图 -->
+            <div v-show="currentTab === 'files' || (isSplitMode && currentTab === 'terminal')" class="files-view flex-1 flex flex-col bg-transparent overflow-hidden relative" style="background: var(--color-bg-base);">
+                <!-- 文件模块独立头部 -->
+                <div class="px-6 py-4 flex items-center justify-between" style="background: var(--color-bg-base);">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center shadow-md mr-4" style="background: linear-gradient(135deg, #007AFF, #5AC8FA);">
+                            <span style="font-size: 18px;">📂</span>
+                        </div>
+                        <div>
+                            <h2 style="font-weight:700; font-size:16px; color:var(--color-text-primary);">文件资源管理器</h2>
+                            <p style="color:var(--color-text-secondary); font-size:11px;">浏览与管理远程服务器文件</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button @click="toggleSplitMode" class="btn btn-secondary btn-sm" :class="{'text-accent': isSplitMode}">
+                            <span style="font-size:14px; margin-right:4px;">{{ isSplitMode ? '🗗' : '🗖' }}</span> {{ isSplitMode ? '退出分屏' : '分屏显示' }}
+                        </button>
+                        <label class="btn btn-secondary btn-sm cursor-pointer" style="font-size:11px;">
+                            上传文件 <input type="file" @change="uploadFile" hidden>
+                        </label>
+                    </div>
+                </div>
+
+                <div style="padding:var(--sp-2) var(--sp-4);display:flex;align-items:center;gap:var(--sp-3);background:var(--glass-bg);backdrop-filter:blur(10px);border-top:0.5px solid var(--color-separator);border-bottom:0.5px solid var(--color-separator);">
+                    <div class="flex-1 flex items-center" style="background:var(--color-fill-3);border-radius:var(--radius-sm);padding:6px 12px;">
+                        <i data-lucide="folder" style="width:14px;height:14px;color:var(--color-accent);margin-right:8px;flex-shrink:0;"></i>
+                        <input type="text" v-model="inputPath" @keyup="(e) => { if(e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); jumpToPath(); } }" class="w-full" style="background:none;border:none;outline:none;font-size:13px;font-weight:600;color:var(--color-text-primary);" placeholder="输入路径跳转">
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button type="button" @click="syncFilesToTerm" class="text-accent font-bold" style="font-size:10px;">跟随终端</button>
+                        <button type="button" @click="syncPathToTerm" style="color:var(--color-text-secondary);font-size:10px;font-weight:700;">下发路径</button>
+                        <label class="cursor-pointer" style="width:28px;height:28px;border-radius:var(--radius-sm);background:rgba(0,122,255,0.1);color:var(--color-accent);display:flex;align-items:center;justify-content:center;">
+                            <i data-lucide="upload" style="width:14px;height:14px;"></i>
+                            <input type="file" @change="uploadFile" style="display:none;">
+                        </label>
+                        <button type="button" @click="goUp" v-if="currentPath !== '/'" style="width:28px;height:28px;border-radius:var(--radius-sm);background:var(--color-fill-2);display:flex;align-items:center;justify-content:center;">
+                            <i data-lucide="arrow-up" style="width:14px;height:14px;"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="padding:var(--sp-2) var(--sp-4);display:flex;align-items:center;justify-content:space-between;gap:var(--sp-6);font-size:11px;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-separator);background:var(--color-bg-base);">
+                    <div class="flex items-center space-x-4">
+                        <span style="font-weight:700; opacity:0.6;">排序依据</span>
+                        <button @click="fileSortBy = 'name'; fileSortOrder = (fileSortBy === 'name' ? (fileSortOrder === 'asc' ? 'desc' : 'asc') : 'asc')" class="flex items-center" :class="fileSortBy === 'name' ? 'text-accent font-bold' : ''">
+                            名称 <span class="ml-0.5" v-if="fileSortBy === 'name'">{{ fileSortOrder === 'asc' ? '↑' : '↓' }}</span>
+                        </button>
+                        <button @click="fileSortBy = 'time'; fileSortOrder = (fileSortBy === 'time' ? (fileSortOrder === 'asc' ? 'desc' : 'asc') : 'asc')" class="flex items-center" :class="fileSortBy === 'time' ? 'text-accent font-bold' : ''">
+                            时间 <span class="ml-0.5" v-if="fileSortBy === 'time'">{{ fileSortOrder === 'asc' ? '↑' : '↓' }}</span>
+                        </button>
+                        <button @click="fileSortBy = 'type'; fileSortOrder = (fileSortBy === 'type' ? (fileSortOrder === 'asc' ? 'desc' : 'asc') : 'asc')" class="flex items-center" :class="fileSortBy === 'type' ? 'text-accent font-bold' : ''">
+                            类型 <span class="ml-0.5" v-if="fileSortBy === 'type'">{{ fileSortOrder === 'asc' ? '↑' : '↓' }}</span>
+                        </button>
+                        <button @click="fileSortBy = 'size'; fileSortOrder = (fileSortBy === 'size' ? (fileSortOrder === 'asc' ? 'desc' : 'asc') : 'asc')" class="flex items-center" :class="fileSortBy === 'size' ? 'text-accent font-bold' : ''">
+                            大小 <span class="ml-0.5" v-if="fileSortBy === 'size'">{{ fileSortOrder === 'asc' ? '↑' : '↓' }}</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center" style="background:var(--color-fill-3);border-radius:var(--radius-sm);padding:4px 10px;width:180px;">
+                        <i data-lucide="search" style="width:12px;height:12px;margin-right:6px;color:var(--color-text-tertiary);"></i>
+                        <input type="text" v-model="fileSearch" placeholder="在当前目录搜索..." class="w-full bg-transparent border-none outline-none" style="font-size:11px;color:var(--color-text-primary);">
+                    </div>
+                </div>
+                
+                <div class="list flex-1 overflow-y-auto" style="border-radius:0;background:transparent;box-shadow:none;">
+                    <div v-for="f in sortedFileList" :key="f.path" @click="handleFileClick(f)" class="list-row" style="background:var(--color-bg-card);margin:8px 16px;border-radius:var(--radius-md);border-bottom:none;box-shadow:var(--shadow-xs);">
+                        <input type="checkbox" v-model="selectedPaths" :value="f.path" @click.stop style="width:18px;height:18px;margin-right:4px;">
+                        <div class="list-row-icon" :style="f.isDirectory ? 'background:var(--color-accent-light);color:var(--color-accent);' : 'background:var(--color-fill-2);color:var(--color-text-secondary);'">
+                            <i :data-lucide="f.isDirectory ? 'folder' : 'file-text'" style="width:16px;height:16px;"></i>
+                        </div>
+                        <div class="list-row-label flex flex-col truncate" style="line-height:1.3;">
+                            <div class="flex items-center" style="gap:6px;">
+                                <span style="font-weight:600;font-size:15px;" class="truncate">{{ f.name }}</span>
+                            </div>
+                            <div class="flex items-center" style="gap:5px;margin-top:3px;flex-wrap:wrap;">
+                                <!-- 文件类型彽章 -->
+                                <span v-if="f.isDirectory" style="display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:4px;font-size:9px;font-weight:700;background:rgba(255,149,0,0.1);color:#FF9500;">📁 目录</span>
+                                <span v-else style="display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:4px;font-size:9px;font-weight:700;background:var(--color-fill-2);color:var(--color-text-secondary);font-family:var(--font-mono);">{{ getFileExt(f.name) }}</span>
+                                <!-- 文件大小 -->
+                                <span v-if="!f.isDirectory" style="font-size:10px;color:var(--color-text-tertiary);">{{ getFileSizeStr(f.size) }}</span>
+                                <!-- 修改时间 -->
+                                <span style="font-size:10px;color:var(--color-text-tertiary);">{{ formatTime(new Date(f.lastModified)) }}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <button v-if="!f.isDirectory" @click.stop="downloadFile(f)" class="p-2 text-accent hover:bg-accent-light rounded-full transition-colors" title="快速提取文件">
+                                <i data-lucide="download" style="width:18px;height:18px;"></i>
+                            </button>
+                            <button type="button" @click.stop="openMenu(f)" style="color:var(--color-text-tertiary);padding:4px;"><i data-lucide="more-horizontal" style="width:20px;height:20px;"></i></button>
+                        </div>
+                    </div>
+                    <div v-if="fileList.length === 0" class="flex flex-col items-center justify-center py-20" style="opacity:0.4;">
+                        <i data-lucide="inbox" style="width:40px;height:40px;margin-bottom:12px;"></i>
+                        <p style="font-weight:600;">暂无内容</p>
+                    </div>
+                    <div style="height: 100px;"></div>
+                </div>
+            </div>
+
+            <!-- 传输记录视图 -->
+            <div v-show="currentTab === 'transfer'" class="flex-1 flex flex-col bg-transparent overflow-hidden relative" style="background: var(--color-bg-base);">
+                <!-- 头部 -->
+                <div class="px-6 pt-6 pb-0">
+                    <div class="flex items-center justify-between mb-5">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg mr-4" style="background: linear-gradient(135deg, #FF9500, #FFCC00);">
+                                <span style="font-size: 24px;">☁️</span>
+                            </div>
+                            <div>
+                                <h2 style="font-weight:800; font-size:22px; color:var(--color-text-primary); letter-spacing:-0.5px;">传输任务中心</h2>
+                                <p style="color:var(--color-text-secondary); font-size:13px; margin-top:1px;">共 {{ transferList.length }} 条记录</p>
+                            </div>
+                        </div>
+                        <button @click="clearTransfers" class="btn btn-secondary" style="height:36px; padding:0 16px; border-radius:10px; font-size:13px;">清空历史</button>
+                    </div>
+
+                    <!-- 搜索栏 -->
+                    <div class="relative" style="margin-bottom:12px;">
+                        <div style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--color-text-tertiary);pointer-events:none;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                        </div>
+                        <input type="text" v-model="transferSearch" placeholder="搜索文件名、路径、服务器..."
+                            style="width:100%;height:40px;padding:0 16px 0 40px;border-radius:12px;border:1px solid var(--color-separator);background:var(--color-bg-card);color:var(--color-text-primary);font-size:14px;outline:none;"
+                            onfocus="this.style.borderColor='var(--color-accent)'" onblur="this.style.borderColor='var(--color-separator)'" />
+                        <button v-if="transferSearch" @click="transferSearch=''" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--color-text-tertiary);font-size:16px;">×</button>
+                    </div>
+
+                    <!-- 类型筛选 + 排序 -->
+                    <div class="flex items-center justify-between" style="margin-bottom:8px;gap:8px;flex-wrap:wrap;">
+                        <!-- 快速筛选 Tab -->
+                        <div class="flex" style="gap:4px;">
+                            <button v-for="opt in [{k:'',l:'全部'},{k:'UPLOAD',l:'上传'},{k:'DOWNLOAD',l:'下载'},{k:'DELETE',l:'删除'},{k:'RENAME',l:'改名'}]" :key="opt.k"
+                                @click="transferTypeFilter = opt.k"
+                                style="height:28px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:600;transition:all 0.15s;"
+                                :style="transferTypeFilter === opt.k ? 'background:var(--color-accent);color:#fff;' : 'background:var(--color-fill-2);color:var(--color-text-secondary);'">{{ opt.l }}</button>
+                        </div>
+                        <!-- 排序 -->
+                        <div class="flex items-center" style="gap:4px;">
+                            <span style="font-size:11px;color:var(--color-text-tertiary);">排序:</span>
+                            <button v-for="s in [{k:'time',l:'时间'},{k:'name',l:'名称'},{k:'type',l:'类型'},{k:'status',l:'状态'}]" :key="s.k"
+                                @click="transferSortBy === s.k ? transferSortOrder = (transferSortOrder==='desc'?'asc':'desc') : (transferSortBy=s.k, transferSortOrder='desc')"
+                                style="height:28px;padding:0 10px;border-radius:8px;font-size:12px;font-weight:600;transition:all 0.15s;"
+                                :style="transferSortBy === s.k ? 'background:var(--color-fill-2);color:var(--color-accent);' : 'color:var(--color-text-tertiary);'">
+                                {{ s.l }}{{ transferSortBy === s.k ? (transferSortOrder==='desc' ? ' ↓' : ' ↑') : '' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 结果提示 -->
+                <div v-if="filteredTransferList.length === 0 && transferList.length > 0" class="text-center py-8" style="color:var(--color-text-tertiary);">
+                    <p style="font-size:14px;">🔍 未找到匹配的传输记录</p>
+                    <button @click="transferSearch='';transferTypeFilter=''" style="font-size:12px;color:var(--color-accent);margin-top:6px;">清除筛选条件</button>
+                </div>
+
+                <div class="list flex-1 overflow-y-auto" style="border-radius:0;background:transparent;box-shadow:none;">
+                    <div v-for="t in filteredTransferList" :key="t.id" class="list-row" style="background:var(--color-bg-card);margin:8px 16px;border-radius:14px;border-bottom:none;box-shadow:var(--shadow-xs);display:flex;align-items:center;padding:14px 16px;gap:14px;">
+                        <!-- 类型图标区 -->
+                        <div style="width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;"
+                            :style="t.type === 'UPLOAD' ? 'background:rgba(52,199,89,0.12);' : (t.type === 'DELETE' ? 'background:rgba(255,59,48,0.12);' : (t.type === 'RENAME' ? 'background:rgba(175,82,222,0.12);' : 'background:rgba(0,122,255,0.12);'))">
+                            {{ t.isDir ? '📁' : (t.type === 'UPLOAD' ? '⬆️' : (t.type === 'DELETE' ? '🗑️' : (t.type === 'RENAME' ? '🏷️' : '⬇️'))) }}
+                        </div>
+
+                        <!-- 主信息区 -->
+                        <div class="flex-1 overflow-hidden">
+                            <!-- 第一行：文件名 + 状态 -->
+                            <div class="flex justify-between items-center" style="margin-bottom:5px;">
+                                <span style="font-weight:700;font-size:14px;color:var(--color-text-primary);max-width:55%;" class="truncate">{{ t.name }}</span>
+                                <span style="font-size:12px;font-weight:700;flex-shrink:0;"
+                                    :style="t.status === 'COMPLETED' ? 'color:var(--color-success)' : (t.status === 'ERROR' ? 'color:var(--color-red)' : 'color:var(--color-text-secondary)')">
+                                    {{ t.status === 'COMPLETED' ? '✔️ 成功' : (t.status === 'ERROR' ? '❌ 失败' : (t.status === 'DELETING' ? '粉碎中...' : (t.status === 'RENAMING' ? '改名中...' : t.progress + '%'))) }}
+                                </span>
+                            </div>
+
+                            <!-- 第二行：小徐陡 -->
+                            <div class="flex items-center flex-wrap" style="gap:6px;margin-bottom:4px;">
+                                <!-- 操作类型彽章 -->
+                                <span style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;font-size:10px;font-weight:700;"
+                                    :style="t.type === 'UPLOAD' ? 'background:rgba(52,199,89,0.1);color:var(--color-success);' : (t.type === 'DELETE' ? 'background:rgba(255,59,48,0.1);color:var(--color-red);' : (t.type === 'RENAME' ? 'background:rgba(175,82,222,0.1);color:#AF52DE;' : 'background:rgba(0,122,255,0.1);color:var(--color-accent);'))">
+                                    {{ t.type === 'UPLOAD' ? '上传' : (t.type === 'DELETE' ? '删除' : (t.type === 'RENAME' ? '改名' : '下载')) }}
+                                </span>
+                                <!-- 文件类型彽章 -->
+                                <span v-if="t.isDir" style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,149,0,0.1);color:#FF9500;">目录</span>
+                                <span v-else-if="t.fileExt" style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;font-size:10px;font-weight:700;background:var(--color-fill-2);color:var(--color-text-secondary);font-family:var(--font-mono);">{{ t.fileExt }}</span>
+                                <!-- 文件大小 -->
+                                <span v-if="t.fileSize" style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;font-size:10px;font-weight:600;background:var(--color-fill-2);color:var(--color-text-tertiary);">{{ t.fileSize }}</span>
+                                <!-- 服务器来源 -->
+                                <span v-if="t.server" style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;font-size:10px;font-weight:600;background:rgba(0,122,255,0.06);color:var(--color-accent);font-family:var(--font-mono);">🖥 {{ t.server }}</span>
+                            </div>
+
+                            <!-- 第三行：路径 + 时间 -->
+                            <div class="flex justify-between items-center">
+                                <span style="font-size:11px;color:var(--color-text-tertiary);font-family:var(--font-mono);" class="truncate">{{ t.targetPath }}</span>
+                                <span style="font-size:11px;color:var(--color-text-tertiary);flex-shrink:0;margin-left:8px;">{{ t.timestamp }}</span>
+                            </div>
+
+                            <!-- 进度条 -->
+                            <div v-if="t.status === 'UPLOADING' || t.status === 'DOWNLOADING'" style="height:3px;background:var(--color-fill-2);border-radius:2px;margin-top:8px;overflow:hidden;">
+                                <div :style="{ width: t.progress + '%', background: 'var(--color-accent)', height: '100%', borderRadius: '2px', transition: 'width 0.3s' }"></div>
+                            </div>
+
+                            <!-- 错误信息 -->
+                            <div v-if="t.status === 'ERROR' && t.errorMessage" style="margin-top:4px;font-size:11px;color:var(--color-red);opacity:0.8;" class="truncate">{{ t.errorMessage }}</div>
+                        </div>
+                    </div>
+                    <div v-if="transferList.length === 0" class="flex flex-col items-center justify-center py-20" style="opacity:0.4;">
+                        <i data-lucide="inbox" style="width:40px;height:40px;margin-bottom:12px;"></i>
+                        <p style="font-weight:600;">暂无传输任务</p>
+                    </div>
+                    <div style="height: 100px;"></div>
+                </div>
+            </div>
+
+            <!-- Docker 管控舱 -->
+            <div v-show="currentTab === 'docker'" class="flex-1 overflow-y-auto" style="background: var(--color-bg-base);">
+                <!-- 容器模块独立头部 -->
+                <div class="px-8 py-6 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center shadow-lg mr-4" style="background: linear-gradient(135deg, #2496ED, #7FBADC);">
+                            <span style="font-size: 24px;">🐳</span>
+                        </div>
+                        <div>
+                            <h2 style="font-weight:800; font-size:24px; color:var(--color-text-primary); letter-spacing:-0.5px;">容器中枢系统</h2>
+                            <p style="color:var(--color-text-secondary); font-size:14px; margin-top:2px;">基于 Docker Engine 的实时容器编排与日志管控</p>
+                        </div>
+                    </div>
+                    <button @click="fetchContainers()" class="btn btn-secondary" style="height:44px; padding:0 20px; border-radius:12px;">刷新列表</button>
+                </div>
+                <div class="bento-grid px-8 pb-24 max-w-6xl mx-auto">
+                    <div class="card bento-col-12 flex justify-between items-center" style="padding: 16px 24px;">
+                        <div class="flex items-center">
+                            <i data-lucide="box" style="width:24px;height:24px;color:var(--color-accent);margin-right:12px;"></i>
+                            <div>
+                                <h2 style="font-size:16px;font-weight:700;">容器中枢 (Docker Engine)</h2>
+                                <p style="font-size:12px;color:var(--color-text-tertiary);">实时管控本机微服务实例</p>
+                            </div>
+                        </div>
+                        <button @click="fetchContainers()" class="btn btn-secondary" style="padding:8px 16px;font-size:12px;"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i></button>
+                    </div>
+
+                    <div v-for="c in dockerContainers" :key="c.id" class="card bento-col-6 flex flex-col justify-between" style="min-height: 140px; border-left: 4px solid var(--color-fill-2);" :style="c.state === 'running' ? 'border-left-color: var(--color-success);' : (c.state === 'exited' ? 'border-left-color: var(--color-danger);' : '')">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 style="font-size:15px;font-weight:700;" class="truncate" :title="c.name">{{c.name}}</h3>
+                                <span class="badge" :class="c.state === 'running' ? 'badge-green' : (c.state === 'exited' ? 'badge-red' : '')">{{c.state}}</span>
+                            </div>
+                            <p style="font-size:12px;color:var(--color-text-tertiary);font-family:var(--font-mono);" class="truncate">{{c.image}}</p>
+                            <p style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;">{{c.status}}</p>
+                        </div>
+                        
+                        <div class="flex space-x-2 mt-4 pt-4" style="border-top:1px solid var(--color-separator);">
+                            <button v-if="c.state !== 'running'" @click="controlContainer(c.id, 'start')" class="flex-1 btn btn-secondary text-accent" style="padding:6px;font-size:12px;"><i data-lucide="play" style="width:14px;height:14px;margin-right:4px;"></i> 启动</button>
+                            <button v-if="c.state === 'running'" @click="controlContainer(c.id, 'stop')" class="flex-1 btn btn-danger" style="padding:6px;font-size:12px;"><i data-lucide="square" style="width:14px;height:14px;margin-right:4px;"></i> 停止</button>
+                            <button v-if="c.state === 'running'" @click="controlContainer(c.id, 'restart')" class="flex-1 btn btn-secondary" style="padding:6px;font-size:12px;"><i data-lucide="rotate-cw" style="width:14px;height:14px;margin-right:4px;"></i> 重启</button>
+                            <button @click="fetchContainerLogs(c.id)" class="flex-1 btn btn-secondary" style="padding:6px;font-size:12px;"><i data-lucide="terminal-square" style="width:14px;height:14px;margin-right:4px;"></i> 日志</button>
+                        </div>
+                    </div>
+
+                    <div v-if="dockerContainers.length === 0" class="bento-col-12 text-center py-12" style="color:var(--color-text-tertiary);">
+                        <i data-lucide="inbox" style="width:40px;height:40px;margin:0 auto 12px;opacity:0.5;"></i>
+                        <p>暂无容器数据，请确认 Docker 引擎已启动</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Docker 日志弹窗 -->
+            <div v-if="showDockerLogs" @click="showDockerLogs = false" class="sheet-overlay flex items-center justify-center p-4">
+                <div @click.stop class="card-glass w-full max-w-4xl flex flex-col" style="height:80vh;padding:0;">
+                    <div class="flex justify-between items-center" style="padding:16px 20px;border-bottom:1px solid var(--color-separator);">
+                        <h3 style="font-size:15px;font-weight:700;"><i data-lucide="terminal" style="width:16px;height:16px;display:inline-block;margin-right:8px;vertical-align:text-bottom;"></i> 容器日志 (末尾 100 行)</h3>
+                        <button @click="showDockerLogs = false" style="color:var(--color-text-secondary);"><i data-lucide="x" style="width:20px;height:20px;"></i></button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto" style="background:#000;padding:16px;border-radius:0 0 var(--radius-lg) var(--radius-lg);">
+                        <pre style="font-family:var(--font-mono);font-size:12px;color:#A0A0B0;white-space:pre-wrap;word-break:break-all;">{{dockerLogContent}}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 审计日志视图 -->
+            <div v-show="currentTab === 'audit'" class="flex-1 flex flex-col overflow-hidden" style="background: var(--color-bg-base);">
+                <!-- 审计模块独立头部 -->
+                <div class="px-8 py-6 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center shadow-lg mr-4" style="background: linear-gradient(135deg, #8E8E93, #C7C7CC);">
+                            <span style="font-size: 24px;">📜</span>
+                        </div>
+                        <div>
+                            <h2 style="font-weight:800; font-size:24px; color:var(--color-text-primary); letter-spacing:-0.5px;">全量审计日志</h2>
+                            <p style="color:var(--color-text-secondary); font-size:14px; margin-top:2px;">可追溯的系统连接日志与指令执行审计记录</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto px-8 pb-24">
+                    <div v-for="log in auditLogs" :key="log.timestamp + log.ip" class="log-card">
+                        <div class="log-header">
+                            <span class="badge" :class="log.status.includes('成功') ? 'badge-green' : 'badge-red'">{{ log.status }}</span>
+                            <span class="log-time">{{ log.timestamp }}</span>
+                        </div>
+                        <div class="log-title">{{ log.action }}</div>
+                        <div class="log-detail">{{ log.ip }} · {{ log.detail }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 批量执行视图 -->
+            <div v-show="currentTab === 'batch'" class="flex-1 overflow-auto p-8" style="background: var(--color-bg-base);">
+                <div class="max-w-4xl mx-auto">
+                    <div class="flex items-center mb-8">
+                        <div class="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center shadow-lg mr-4" style="background: linear-gradient(135deg, var(--color-accent), #5E5CE6);">
+                            <span style="font-size: 24px;">🚀</span>
+                        </div>
+                        <div>
+                            <h2 style="font-weight:800; font-size:24px; color:var(--color-text-primary); letter-spacing:-0.5px;">集群批量运维</h2>
+                            <p style="color:var(--color-text-secondary); font-size:14px; margin-top:2px;">对多台服务器并行下发指令，实时监控任务状态</p>
+                        </div>
+                    </div>
+
+                    <div class="card p-8 space-y-8 shadow-md" style="border:none; background:rgba(255,255,255,0.9); backdrop-filter:blur(20px);">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="space-y-2">
+                                <label style="font-size:12px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">默认端口</label>
+                                <input type="text" v-model="batchDefaultPort" class="input" placeholder="22">
+                            </div>
+                            <div class="space-y-2">
+                                <label style="font-size:12px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">默认账号</label>
+                                <input type="text" v-model="batchDefaultUser" class="input" placeholder="root">
+                            </div>
+                            <div class="space-y-2">
+                                <label style="font-size:12px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">全局密码/密钥</label>
+                                <input type="password" v-model="batchDefaultPwd" class="input" placeholder="留空则从清单获取">
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-end">
+                                <label style="font-size:12px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">目标服务器清单</label>
+                                <span style="font-size:11px;color:var(--color-text-tertiary);">格式: IP[:Port,User,Pwd]</span>
+                            </div>
+                            <textarea v-model="batchServersInput" class="input" style="height:160px;font-family:var(--font-mono);font-size:13px;resize:none;padding:16px;" placeholder="172.16.20.56&#10;172.16.20.57"></textarea>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <label style="font-size:12px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">下发执行命令</label>
+                                <button @click="openSnippetManager()" class="text-accent hover:underline flex items-center" style="font-size:12px; font-weight:600;">
+                                    <span style="margin-right:4px;">⚙️</span> 管理指令库
+                                </button>
+                            </div>
+                            
+                            <div class="flex gap-2 overflow-x-auto hide-scroll pb-2 mb-2" style="scrollbar-width:none; -ms-overflow-style:none;">
+                                <div v-if="displayedPinnedSnippets.length === 0" class="text-tertiary flex items-center h-full" style="font-size:12px; font-style:italic;">暂无置顶指令，去右侧管理中添加</div>
+                                <div v-for="s in displayedPinnedSnippets" :key="s.name" 
+                                     @click="batchCommandInput = s.command" 
+                                     class="snippet-tag cursor-pointer hover:bg-accent-light hover:text-accent transition-colors" 
+                                     style="white-space:nowrap; flex-shrink:0;">
+                                    {{ s.name }}
+                                </div>
+                            </div>
+
+                            <textarea v-model="batchCommandInput" class="input" style="height:120px;font-family:var(--font-mono);font-size:13px;resize:none;padding:16px;background:var(--color-fill-3);" placeholder="输入要下发的 shell 命令..."></textarea>
+                            
+                            <label class="flex items-center space-x-2 mt-4 cursor-pointer">
+                                <input type="checkbox" v-model="batchBurnMode" class="form-checkbox h-4 w-4 text-primary" style="accent-color:var(--color-primary);border-radius:4px;">
+                                <span style="font-size:13px;color:var(--color-text-secondary);font-weight:600;">开启即焚模式 <span style="opacity:0.6;font-weight:400;">(执行后秒释放，适合 >100 台高并发)</span></span>
+                            </label>
+                        </div>
+
+                        <button @click="executeBatchCommand" class="btn btn-primary w-full shadow-lg h-14" :disabled="batchLoading" 
+                                style="font-size:16px; font-weight:700; border-radius:14px; background: linear-gradient(135deg, var(--color-accent), #5E5CE6);">
+                            <span v-if="batchLoading" class="spin inline-block mr-2">⏳</span>
+                            <span v-else class="mr-2">⚡️</span>
+                            {{ batchLoading ? '正在下发指令...' : '开始集群批量执行' }}
+                        </button>
+                    </div>
+
+                    <!-- 批量执行结果独立弹窗页面 -->
+                    <div v-if="batchResult" class="sheet-overlay flex items-center justify-center p-4" style="z-index: 500;">
+                        <div @click.stop class="card w-full max-w-6xl flex flex-col" style="height:90vh; padding:0; overflow:hidden; border:1px solid var(--color-accent); background: var(--color-bg-base); box-shadow: 0 20px 60px rgba(0,0,0,0.4);">
+                            <div class="flex justify-between items-center px-8 py-5 border-b border-separator bg-hover-bg">
+                                <div class="flex items-center">
+                                    <span style="font-size:24px; margin-right:12px;">📊</span>
+                                    <div>
+                                        <h3 style="font-weight:700; font-size:18px;">批量执行任务报告</h3>
+                                        <p style="font-size:12px; color:var(--color-text-secondary); margin-top:2px;">
+                                            成功: <span class="text-green" style="font-weight:700;">{{ batchResult.success }}</span> / 
+                                            失败: <span class="text-red" style="font-weight:700;">{{ batchResult.fail }}</span> / 
+                                            总计: {{ batchResult.total }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-4">
+                                    <button @click="exportSelectedBatchResults" class="btn btn-primary" :disabled="batchSelectedHosts.length === 0">
+                                        <span style="margin-right:8px;">💾</span>
+                                        导出选中 ({{ batchSelectedHosts.length }})
+                                    </button>
+                                    <button @click="batchResult = null" class="btn btn-secondary" style="width:40px; height:40px; padding:0; border-radius:50%;">
+                                        <span>✕</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="flex-1 overflow-hidden flex flex-col p-6 bg-white dark:bg-black">
+                                <div class="overflow-auto rounded-xl border border-separator shadow-sm">
+                                    <table class="w-full text-left" style="font-size:13px; border-collapse: separate; border-spacing: 0;">
+                                        <thead style="background:var(--color-bg-secondary); position: sticky; top: 0; z-index: 10;">
+                                            <tr>
+                                                <th style="padding:15px 20px; width:50px;"><input type="checkbox" @change="toggleAllBatchResults($event)" style="width:18px; height:18px;"></th>
+                                                <th style="padding:15px 20px; width:250px;">目标主机</th>
+                                                <th style="padding:15px 20px; width:120px;">执行状态</th>
+                                                <th style="padding:15px 20px;">执行回显 (点击查看全文)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="r in batchResult.results" :key="r.host" class="border-t border-separator hover:bg-hover-bg transition-colors">
+                                                <td style="padding:15px 20px;"><input type="checkbox" v-model="batchSelectedHosts" :value="r.host" style="width:18px; height:18px;"></td>
+                                                <td style="padding:15px 20px; font-family:var(--font-mono);">
+                                                    <div @click="connectToBatchHost(r.host)" class="flex items-center cursor-pointer group" title="点击直接进入该主机的 SSH 终端">
+                                                        <span style="font-weight:700; color:var(--color-text-primary);" class="group-hover:text-accent transition-colors">{{ r.host }}</span>
+                                                        <span class="ml-2 opacity-0 group-hover:opacity-100 transition-opacity" style="font-size:12px;">💻</span>
+                                                    </div>
+                                                </td>
+                                                <td style="padding:15px 20px;">
+                                                    <span :class="(r.status === '执行完毕' || r.status === '成功') ? 'badge badge-green' : 'badge badge-red'">
+                                                        {{ r.status }}
+                                                    </span>
+                                                </td>
+                                                <td style="padding:15px 20px;">
+                                                    <div @click="viewBatchDetail(r)" class="cursor-pointer group" style="max-height:100px; overflow-y:auto; color:var(--color-text-secondary); font-family:var(--font-mono); font-size:12px; white-space:pre-wrap;">
+                                                        <div class="group-hover:text-accent transition-colors">{{ r.output || '(无输出)' }}</div>
+                                                        <div class="mt-2 text-accent opacity-0 group-hover:opacity-100 transition-opacity" style="font-size:11px; font-weight:700;">🔍 点击展开全屏对比</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 批量详情全屏对比弹窗 (在结果弹窗之上) -->
+                    <div v-if="viewingBatchDetail" @click="viewingBatchDetail = null" class="sheet-overlay flex items-center justify-center p-8" style="z-index: 1000;">
+                        <div @click.stop class="card-glass w-full max-w-4xl flex flex-col" style="height:80vh; padding:0; overflow:hidden; box-shadow: 0 0 50px rgba(0,0,0,0.5);">
+                            <div class="flex justify-between items-center px-6 py-4 border-b border-separator bg-hover-bg">
+                                <div>
+                                    <h3 style="font-weight:700; font-size:16px;">{{ viewingBatchDetail.host }}</h3>
+                                    <p style="font-size:12px; color:var(--color-text-secondary); margin-top:2px;">执行状态: {{ viewingBatchDetail.status }}</p>
+                                </div>
+                                <div class="flex items-center space-x-3">
+                                    <button @click="copyToClipboard(viewingBatchDetail.output)" class="btn btn-secondary btn-sm">复制全文</button>
+                                    <button @click="viewingBatchDetail = null" class="btn btn-sm" style="color:var(--color-text-tertiary);">返回列表</button>
+                                </div>
+                            </div>
+                            <div class="flex-1 overflow-auto p-8" style="background:#000; font-family:var(--font-mono); font-size:14px; line-height:1.7; color:#e0e0e0;">
+                                <pre style="white-space:pre-wrap; word-break:break-all;">{{ viewingBatchDetail.output }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 指令库大厅视图 -->
+            <div v-show="currentTab === 'snippets'" class="flex-1 flex flex-col overflow-hidden" style="background: var(--color-bg-base);">
+                <div class="px-8 py-6 flex flex-col gap-6">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center shadow-lg mr-4" style="background: linear-gradient(135deg, #10B981, #059669);">
+                                <span style="font-size: 24px;">⚡️</span>
+                            </div>
+                            <div>
+                                <h2 style="font-weight:800; font-size:24px; color:var(--color-text-primary); letter-spacing:-0.5px;">全域指令库</h2>
+                                <div class="flex items-center mt-2 gap-4">
+                                    <p style="color:var(--color-text-secondary); font-size:14px;">多维度系统指令管理中心，单次或批量录入</p>
+                                    <div class="flex items-center bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-lg">
+                                        <span style="font-size:12px; color:var(--color-text-tertiary); margin-right:8px;">终端快捷栏展示上限:</span>
+                                        <input type="number" v-model.number="maxVisibleSnippets" @change="saveMaxVisibleSnippets" min="1" max="50" style="width:40px; background:transparent; border:none; color:var(--color-text-primary); font-size:13px; font-weight:bold; outline:none; text-align:center;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 items-center">
+                            <div class="flex items-center bg-white dark:bg-gray-800 rounded-xl px-4 shadow-sm border border-gray-100 dark:border-gray-700 mr-2 transition-all focus-within:ring-2 focus-within:ring-accent focus-within:border-accent" style="width: 280px; height:44px;">
+                                <i data-lucide="search" style="width:16px;height:16px;color:var(--color-text-tertiary);margin-right:8px;"></i>
+                                <input type="text" v-model="searchSnippetQuery" placeholder="搜索指令或命令内容..." style="flex:1; border:none; outline:none; background:transparent; color:var(--color-text-primary); font-size:13px; height:100%;">
+                                <i v-if="searchSnippetQuery" data-lucide="x" @click="searchSnippetQuery = ''" style="width:14px;height:14px;color:var(--color-text-tertiary);cursor:pointer;margin-left:8px;" class="hover:text-red-500"></i>
+                            </div>
+                            <button @click="showBatchSnippetForm = true" class="btn btn-secondary" style="height:44px; padding:0 20px; border-radius:12px;">批量导入</button>
+                            <button @click="openSnippetEditor()" class="btn btn-primary" style="height:44px; padding:0 20px; border-radius:12px;">单条新增</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto px-8 pb-24 max-w-6xl w-full mx-auto">
+                    <div v-for="(group, category) in groupedSnippets" :key="category" class="mb-8">
+                        <h3 style="font-size:16px; font-weight:700; color:var(--color-text-primary); margin-bottom:16px; display:flex; align-items:center;">
+                            <span style="color:var(--color-accent); margin-right:8px;">#</span> {{ category }}
+                            <span style="background:var(--color-fill-2); color:var(--color-text-secondary); font-size:12px; padding:2px 8px; border-radius:12px; margin-left:8px;">{{ group.length }}</span>
+                        </h3>
+                        <div class="bento-grid">
+                            <div v-for="(s, idx) in group" :key="s.name" @click="executeSnippet(s)" class="card bento-col-4 flex flex-col justify-between group cursor-pointer hover:shadow-md transition-shadow" style="min-height: 120px; padding:16px; position:relative; overflow:hidden;">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h4 style="font-size:15px; font-weight:700; color:var(--color-text-primary);" class="truncate pr-8 flex items-center" :title="s.name">
+                                        <span v-if="s.pinned" style="margin-right:4px; font-size:14px;" title="已置顶展示">✨</span>
+                                        {{ s.name }}
+                                        <span v-if="s.type === 'interactive'" style="margin-left:6px; font-size:10px; background:var(--color-accent); color:#fff; padding:2px 4px; border-radius:4px; font-weight:600;">传参</span>
+                                    </h4>
+                                    <div style="position:absolute; right:16px; top:16px; display:flex; gap:8px; background:var(--color-bg-card); padding:4px; border-radius:8px; box-shadow:var(--shadow-sm); transition:opacity 0.2s;" :style="s.pinned ? 'opacity: 1;' : ''" :class="s.pinned ? '' : 'opacity-0 group-hover:opacity-100'">
+                                        <div class="cursor-pointer flex items-center justify-center rounded transition-colors" :class="s.pinned ? 'star-btn-pinned' : 'star-btn-unpinned'" style="width:24px;height:24px;" @click.stop="toggleSnippetPin(s)">
+                                            <i data-lucide="star" :style="s.pinned ? 'fill:currentColor;width:16px;height:16px;pointer-events:none;' : 'width:16px;height:16px;pointer-events:none;'"></i>
+                                        </div>
+                                        <div class="cursor-pointer text-secondary hover:text-accent flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-700" style="width:24px;height:24px;" @click.stop="openSnippetEditor(s, snippets.findIndex(x => x.name === s.name))">
+                                            <i data-lucide="edit-3" style="width:16px;height:16px;pointer-events:none;"></i>
+                                        </div>
+                                        <div class="cursor-pointer text-secondary hover:text-red-500 flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/20" style="width:24px;height:24px;" @click.stop="deleteSnippet(snippets.findIndex(x => x.name === s.name))">
+                                            <i data-lucide="trash-2" style="width:16px;height:16px;pointer-events:none;"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="font-size:13px; color:var(--color-text-secondary); font-family:var(--font-mono); background:var(--color-fill-2); padding:8px; border-radius:8px; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" :title="s.command">
+                                    {{ s.command }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div v-if="Object.keys(groupedSnippets).length === 0" class="text-center py-20" style="color:var(--color-text-tertiary);">
+                        <i data-lucide="layers" style="width:48px;height:48px;margin:0 auto 16px;opacity:0.3;"></i>
+                        <p>暂无指令，请点击右上角新增</p>
+                    </div>
+                </div>
+            </div>
+
+
+                <!-- 批量操作层 -->
+                <div v-if="selectedPaths.length > 0" class="card-glass flex items-center space-x-4" style="position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:200;padding:12px 24px;border-radius:var(--radius-full);">
+                    <span style="font-size:var(--text-sub);font-weight:600;">已选择 {{ selectedPaths.length }} 项</span>
+                    <button @click="handleBatchDelete" style="color:var(--color-red);font-weight:600;font-size:var(--text-sub);">销毁</button>
+                    <button @click="selectedPaths = []" style="color:var(--color-text-secondary);font-weight:600;font-size:var(--text-sub);">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 动作菜单 -->
+    <!-- 自定义高级弹窗组件 -->
+    <div v-if="customModal.show" class="modal-container">
+        <div class="modal-backdrop" @click="customModal.onCancel"></div>
+        <div class="modal-content">
+            <!-- 图标 + 标题 -->
+            <div class="flex items-center mb-3">
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center mr-3 flex-shrink-0"
+                    :style="{background: customModal.type === 'danger' ? 'rgba(255,59,48,0.1)' : 'rgba(0,122,255,0.08)'}">
+                    <span style="font-size: 20px;">{{ customModal.type === 'danger' ? '⚠️' : (customModal.inputMode ? '✏️' : 'ℹ️') }}</span>
+                </div>
+                <h3 style="font-size: 17px; font-weight: 800; letter-spacing:-0.3px;">{{ customModal.title }}</h3>
+            </div>
+
+            <!-- 消息文本 -->
+            <p v-if="customModal.message" style="color: var(--color-text-secondary); font-size: 14px; line-height: 1.6; margin-bottom: 16px;">{{ customModal.message }}</p>
+
+            <!-- 输入模式：自定义输入框 -->
+            <div v-if="customModal.inputMode" style="margin-bottom:20px;">
+                <input
+                    id="modal-input-field"
+                    type="text"
+                    v-model="customModal.inputValue"
+                    :placeholder="customModal.inputPlaceholder"
+                    @keydown.enter="customModal.onConfirm"
+                    @keydown.esc="customModal.onCancel"
+                    style="width:100%;height:48px;padding:0 16px;border-radius:12px;border:1.5px solid var(--color-separator);background:var(--color-bg-base);color:var(--color-text-primary);font-size:15px;font-family:var(--font-mono);outline:none;transition:border-color 0.15s;"
+                    onfocus="this.style.borderColor='var(--color-accent)'"
+                    onblur="this.style.borderColor='var(--color-separator)'"
+                />
+                <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px;">Enter 确认 &nbsp;&middot;&nbsp; Esc 取消</p>
+            </div>
+
+            <!-- 操作按鈕 -->
+            <div class="flex flex-col space-y-2">
+                <button @click="customModal.onConfirm" class="modal-btn" :class="customModal.type === 'danger' ? 'modal-btn-danger' : 'modal-btn-primary'">
+                    {{ customModal.confirmText }}
+                </button>
+                <button v-if="!customModal.alertOnly" @click="customModal.onCancel" class="modal-btn modal-btn-secondary">
+                    取消
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div v-if="activeFile" @click="activeFile = null" class="sheet-overlay flex items-end">
+        <div @click.stop class="sheet" style="padding: 0; overflow: hidden; border-radius: 20px 20px 0 0;">
+            <!-- 文件信息头部 -->
+            <div style="padding: 20px 20px 16px; background: var(--color-bg-card); border-bottom: 0.5px solid var(--color-separator);">
+                <div class="sheet-handle" style="margin-bottom: 16px;"></div>
+                <div class="flex items-center space-x-3">
+                    <div style="width:44px;height:44px;border-radius:12px;background:var(--color-fill-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <span style="font-size:22px;">{{ activeFile.isDirectory ? '📁' : '📄' }}</span>
+                    </div>
+                    <div class="flex-1 overflow-hidden">
+                        <p style="font-size:16px;font-weight:700;" class="truncate">{{ activeFile.name }}</p>
+                        <p style="font-size:12px;color:var(--color-text-secondary);margin-top:2px;" class="truncate">{{ activeFile.path }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作列表 -->
+            <div style="padding: 8px 12px; background: var(--color-bg-base);">
+                <div v-if="!activeFile.isDirectory && isEditable(activeFile.name)" @click="openEditor(activeFile)" class="flex items-center" style="padding:14px 12px;border-radius:14px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='var(--color-fill-2)'" onmouseout="this.style.background='transparent'">
+                    <div style="width:38px;height:38px;border-radius:10px;background:rgba(0,122,255,0.1);display:flex;align-items:center;justify-content:center;margin-right:14px;flex-shrink:0;">
+                        <span style="font-size:18px;">✏️</span>
+                    </div>
+                    <div>
+                        <span style="font-size:15px;font-weight:600;">编辑内容</span>
+                        <p style="font-size:12px;color:var(--color-text-secondary);margin-top:1px;">在线修改代码或文本</p>
+                    </div>
+                </div>
+
+                <div v-if="!activeFile.isDirectory" @click="downloadFile(activeFile)" class="flex items-center" style="padding:14px 12px;border-radius:14px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='var(--color-fill-2)'" onmouseout="this.style.background='transparent'">
+                    <div style="width:38px;height:38px;border-radius:10px;background:rgba(52,199,89,0.1);display:flex;align-items:center;justify-content:center;margin-right:14px;flex-shrink:0;">
+                        <span style="font-size:18px;">⬇️</span>
+                    </div>
+                    <div>
+                        <span style="font-size:15px;font-weight:600;">提取到本地</span>
+                        <p style="font-size:12px;color:var(--color-text-secondary);margin-top:1px;">下载至本机设备</p>
+                    </div>
+                </div>
+
+                <div @click="renameFile(activeFile)" class="flex items-center" style="padding:14px 12px;border-radius:14px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='var(--color-fill-2)'" onmouseout="this.style.background='transparent'">
+                    <div style="width:38px;height:38px;border-radius:10px;background:rgba(255,149,0,0.1);display:flex;align-items:center;justify-content:center;margin-right:14px;flex-shrink:0;">
+                        <span style="font-size:18px;">🏷️</span>
+                    </div>
+                    <div>
+                        <span style="font-size:15px;font-weight:600;">重命名</span>
+                        <p style="font-size:12px;color:var(--color-text-secondary);margin-top:1px;">更改文件或目录名称</p>
+                    </div>
+                </div>
+
+                <div style="height:1px;background:var(--color-separator);margin:4px 12px;"></div>
+
+                <div @click="confirmDelete(activeFile)" class="flex items-center" style="padding:14px 12px;border-radius:14px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,59,48,0.06)'" onmouseout="this.style.background='transparent'">
+                    <div style="width:38px;height:38px;border-radius:10px;background:rgba(255,59,48,0.1);display:flex;align-items:center;justify-content:center;margin-right:14px;flex-shrink:0;">
+                        <span style="font-size:18px;">🗑️</span>
+                    </div>
+                    <div>
+                        <span style="font-size:15px;font-weight:700;color:var(--color-red);">安全粉碎</span>
+                        <p style="font-size:12px;color:var(--color-red);opacity:0.7;margin-top:1px;">永久删除，不可恢复</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 取消按鈕 -->
+            <div style="padding: 8px 12px 24px; background: var(--color-bg-base);">
+                <button type="button" @click="activeFile = null" style="width:100%;height:52px;border-radius:16px;background:var(--color-bg-card);color:var(--color-text-primary);font-size:17px;font-weight:600;border:none;">取消</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 编辑器 -->
+    <div v-show="editingFile" style="position:fixed;inset:0;background:var(--color-bg-base);z-index:250;display:flex;flex-direction:column;animation:apple-slide-up var(--t-base) var(--ease-spring);">
+        <div style="padding:calc(var(--sp-3) + env(safe-area-inset-top, 0px)) var(--sp-5) var(--sp-3);display:flex;justify-content:space-between;align-items:center;background:var(--color-bg-card);border-bottom:0.5px solid var(--color-separator);">
+            <div class="flex flex-col truncate" style="max-width:60%;">
+                <span style="font-size:var(--text-sub);font-weight:600;" class="truncate">{{ editingFile?.name }}</span>
+                <span style="font-size:10px;color:var(--color-text-secondary);" class="truncate">{{ editingFile?.path }}</span>
+            </div>
+            <div class="flex space-x-4">
+                <button type="button" @click="saveFile" :disabled="saving" style="color:var(--color-accent);font-weight:600;">{{ saving ? '应用中...' : '提交修改' }}</button>
+                <button type="button" @click="closeEditor" style="color:var(--color-text-secondary);font-weight:600;">退出</button>
+            </div>
+        </div>
+        <div id="ace-editor" class="flex-1"></div>
+    </div>
+    <!-- 指令库管理菜单 -->
+    <div v-if="showSnippetManager" @click="showSnippetManager = false" class="sheet-overlay flex items-end">
+        <div @click.stop class="sheet" style="height:80vh;display:flex;flex-direction:column;">
+            <div class="sheet-handle"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h3 style="font-size:var(--text-title3);font-weight:700;">管理常用命令</h3>
+                <button @click="openSnippetEditor()" style="color:var(--color-accent);font-weight:600;font-size:14px;">新增</button>
+            </div>
+            
+            <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl px-3 py-2 mb-4">
+                <i data-lucide="search" style="width:16px;height:16px;color:var(--color-text-tertiary);margin-right:8px;"></i>
+                <input type="text" v-model="searchSnippetManagerQuery" placeholder="搜索指令名称或命令内容..." style="flex:1; border:none; outline:none; background:transparent; color:var(--color-text-primary); font-size:14px;">
+                <i v-if="searchSnippetManagerQuery" data-lucide="x" @click="searchSnippetManagerQuery = ''" style="width:14px;height:14px;color:var(--color-text-tertiary);cursor:pointer;margin-left:8px;" class="hover:text-red-500"></i>
+            </div>
+            
+            <div class="list flex-1 overflow-y-auto" style="box-shadow:none;background:transparent;padding:0;">
+                <div v-for="s in filteredManagerSnippets" :key="s.name" class="list-row flex justify-between items-center" style="margin-bottom:8px;padding:12px;background:var(--color-bg-card);border-radius:12px;">
+                    <div class="flex-1 overflow-hidden cursor-pointer" @click="openSnippetEditor(s, snippets.findIndex(x => x.name === s.name))">
+                        <span style="font-weight:600;font-size:15px;display:flex;align-items:center;">
+                            {{ s.name }}
+                            <span v-if="s.type === 'interactive'" style="margin-left:6px; font-size:10px; background:var(--color-accent); color:#fff; padding:2px 4px; border-radius:4px; font-weight:600;">传参</span>
+                        </span>
+                        <span style="font-size:12px;color:var(--color-text-secondary);display:block;" class="truncate">{{ s.command }}</span>
+                    </div>
+                    <button @click="deleteSnippet(snippets.findIndex(x => x.name === s.name))" style="color:var(--color-red);padding:8px;"><i data-lucide="trash-2" style="width:18px;height:18px;"></i></button>
+                </div>
+                <div v-if="filteredManagerSnippets.length === 0" class="text-center py-10 opacity-50">暂无匹配的指令</div>
+            </div>
+            <button type="button" @click="showSnippetManager = false" class="btn w-full mt-4" style="background:var(--color-fill-2);color:var(--color-text-primary);">关闭</button>
+        </div>
+    </div>
+    
+    <!-- 单个指令编辑器 -->
+    <div v-if="editingSnippet !== null" @click="editingSnippet = null" class="sheet-overlay flex items-end" style="z-index:600;">
+        <div @click.stop class="sheet" style="padding-bottom:30px;">
+            <div class="sheet-handle"></div>
+            <h3 style="font-size:18px;font-weight:700;margin-bottom:20px;">{{ editingSnippetIndex === -1 ? '新增命令' : '编辑命令' }}</h3>
+            <div class="space-y-4">
+                <div>
+                    <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px;">名称</label>
+                    <input type="text" v-model="editingSnippet.name" class="input" placeholder="如：查看日志">
+                </div>
+                <div>
+                    <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px;">执行命令</label>
+                    <input type="text" v-model="editingSnippet.command" class="input" placeholder="如：tail -n 100 app.log">
+                </div>
+                <div class="flex space-x-4">
+                    <div class="flex-1">
+                        <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px;">执行方式</label>
+                        <select v-model="editingSnippet.type" class="input" style="appearance:none; background-image:url('data:image/svg+xml;utf8,<svg fill=%22none%22 stroke=%22currentColor%22 viewBox=%220 0 24 24%22 xmlns=%22http://www.w3.org/2000/svg%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22M19 9l-7 7-7-7%22></path></svg>'); background-repeat:no-repeat; background-position:right 12px center; background-size:16px;">
+                            <option value="direct">直接回车运行</option>
+                            <option value="interactive">不回车 (等待传参)</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px;">标签分类</label>
+                        <select v-model="editingSnippet.category" class="input" style="appearance:none; background-image:url('data:image/svg+xml;utf8,<svg fill=%22none%22 stroke=%22currentColor%22 viewBox=%220 0 24 24%22 xmlns=%22http://www.w3.org/2000/svg%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22M19 9l-7 7-7-7%22></path></svg>'); background-repeat:no-repeat; background-position:right 12px center; background-size:16px;">
+                            <option v-for="c in snippetCategories" :key="c" :value="c">{{ c }}</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex gap-4" style="margin-top:16px;">
+                    <button type="button" @click="saveSnippet" class="btn btn-primary flex-1">保存配置</button>
+                    <button type="button" @click="runEditingSnippet" class="btn btn-secondary flex-1" style="background:var(--color-fill-2); color:var(--color-accent); font-weight:700;">
+                        <i data-lucide="play" style="width:16px;height:16px;margin-right:8px;display:inline-block;vertical-align:middle;"></i>{{ currentTab === 'batch' ? '填入批量执行' : '发送到终端' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 批量添加指令面板 -->
+    <div v-if="showBatchSnippetForm" @click="showBatchSnippetForm = false" class="sheet-overlay flex items-end" style="z-index:600;">
+        <div @click.stop class="sheet" style="padding-bottom:30px; height:80vh; display:flex; flex-direction:column;">
+            <div class="sheet-handle"></div>
+            <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;">批量新增指令</h3>
+            <p style="font-size:13px; color:var(--color-text-secondary); margin-bottom:16px;">每行一条，格式：<code>名称 = 指令</code> 或 <code>名称 : 指令</code></p>
+            
+            <div style="margin-bottom:16px;">
+                <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px;">统一归属分类</label>
+                <select v-model="batchSnippetCategory" class="input" style="appearance:none; background-image:url('data:image/svg+xml;utf8,<svg fill=%22none%22 stroke=%22currentColor%22 viewBox=%220 0 24 24%22 xmlns=%22http://www.w3.org/2000/svg%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22M19 9l-7 7-7-7%22></path></svg>'); background-repeat:no-repeat; background-position:right 12px center; background-size:16px;">
+                    <option v-for="c in snippetCategories" :key="c" :value="c">{{ c }}</option>
+                </select>
+            </div>
+            
+            <textarea v-model="batchSnippetText" class="input flex-1" style="font-family:var(--font-mono); resize:none; padding:12px;" placeholder="网络探测 = ping baidu.com&#10;端口占用 = netstat -tulnp&#10;系统负载 = top"></textarea>
+            
+            <button type="button" @click="handleBatchAddSnippets" class="btn btn-primary w-full" style="margin-top:16px;">立即批量导入</button>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="/js/app.js?v=45"></script>
+
+</body>
+</html>

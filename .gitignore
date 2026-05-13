@@ -23,3 +23,4 @@ backend.log
 
 # Release Zip (Too large for raw Git, recommend GitHub Releases)
 sty-visit-v1.0-release.zip
+*.zip
